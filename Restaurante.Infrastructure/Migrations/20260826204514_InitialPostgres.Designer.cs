@@ -285,9 +285,9 @@ namespace Restaurante.Infrastructure.Migrations
 
                     b.ToTable("OrderItems", t =>
                         {
-                            t.HasCheckConstraint("CK_OrderItems_Quantity_Positive", "Quantity > 0");
+                            t.HasCheckConstraint("CK_OrderItems_Quantity_Positive", "\"Quantity\" > 0");
 
-                            t.HasCheckConstraint("CK_OrderItems_UnitPrice_NonNegative", "UnitPrice >= 0");
+                            t.HasCheckConstraint("CK_OrderItems_UnitPrice_NonNegative", "\"UnitPrice\" >= 0");
                         });
                 });
 
@@ -334,7 +334,7 @@ namespace Restaurante.Infrastructure.Migrations
 
                     b.ToTable("Products", t =>
                         {
-                            t.HasCheckConstraint("CK_Products_Price_NonNegative", "Price >= 0");
+                            t.HasCheckConstraint("CK_Products_Price_NonNegative", "\"Price\" >= 0");
                         });
                 });
 
@@ -377,7 +377,7 @@ namespace Restaurante.Infrastructure.Migrations
 
                     b.ToTable("Tables", t =>
                         {
-                            t.HasCheckConstraint("CK_Tables_Capacity_Positive", "Capacity > 0");
+                            t.HasCheckConstraint("CK_Tables_Capacity_Positive", "\"Capacity\" > 0");
                         });
                 });
 

@@ -46,7 +46,7 @@ namespace Restaurante.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Tables", x => x.Id);
-                    table.CheckConstraint("CK_Tables_Capacity_Positive", "Capacity > 0");
+                    table.CheckConstraint("CK_Tables_Capacity_Positive", "\"Capacity\" > 0");
                 });
 
             migrationBuilder.CreateTable(
@@ -87,7 +87,7 @@ namespace Restaurante.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Products", x => x.Id);
-                    table.CheckConstraint("CK_Products_Price_NonNegative", "Price >= 0");
+                    table.CheckConstraint("CK_Products_Price_NonNegative", "\"Price\" >= 0");
                     table.ForeignKey(
                         name: "FK_Products_Categories_CategoryId",
                         column: x => x.CategoryId,
@@ -217,8 +217,8 @@ namespace Restaurante.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_OrderItems", x => x.Id);
-                    table.CheckConstraint("CK_OrderItems_Quantity_Positive", "Quantity > 0");
-                    table.CheckConstraint("CK_OrderItems_UnitPrice_NonNegative", "UnitPrice >= 0");
+                    table.CheckConstraint("CK_OrderItems_Quantity_Positive", "\"Quantity\" > 0");
+                    table.CheckConstraint("CK_OrderItems_UnitPrice_NonNegative", "\"UnitPrice\" >= 0");
                     table.ForeignKey(
                         name: "FK_OrderItems_Orders_OrderId",
                         column: x => x.OrderId,

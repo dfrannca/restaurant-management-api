@@ -50,7 +50,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Description).HasMaxLength(500);
             entity.Property(e => e.Price).HasPrecision(10, 2);
             entity.HasIndex(e => new { e.CategoryId, e.IsActive });
-            entity.ToTable(table => table.HasCheckConstraint("CK_Products_Price_NonNegative", "Price >= 0"));
+            entity.ToTable(table => table.HasCheckConstraint("CK_Products_Price_NonNegative", "\"Price\" >= 0"));
             entity.HasOne(e => e.Category)
                   .WithMany(c => c.Products)
                   .HasForeignKey(e => e.CategoryId)
@@ -61,11 +61,16 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Table>(entity =>
         {
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.CreatedAt).HasColumnName("CreatedAt");
+            entity.Property(e => e.UpdatedAt).HasColumnName("UpdatedAt");
+            entity.Property(e => e.IsActive).HasColumnName("IsActive");
+            entity.Property(e => e.Number).HasColumnName("Number").IsRequired();
+            entity.Property(e => e.Status).HasColumnName("Status").IsRequired();
+            entity.Property(e => e.Capacity).HasColumnName("Capacity").IsRequired();
+            entity.Property(e => e.Location).HasColumnName("Location").HasMaxLength(50);
             entity.HasIndex(e => e.Number).IsUnique();
-            entity.Property(e => e.Number).IsRequired();
-            entity.Property(e => e.Location).HasMaxLength(50);
             entity.HasIndex(e => e.Status);
-            entity.ToTable(table => table.HasCheckConstraint("CK_Tables_Capacity_Positive", "Capacity > 0"));
+            entity.ToTable(table => table.HasCheckConstraint("CK_Tables_Capacity_Positive", "\"Capacity\" > 0"));
         });
 
         // Order configuration
@@ -101,8 +106,8 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Observations).HasMaxLength(500);
             entity.ToTable(table =>
             {
-                table.HasCheckConstraint("CK_OrderItems_Quantity_Positive", "Quantity > 0");
-                table.HasCheckConstraint("CK_OrderItems_UnitPrice_NonNegative", "UnitPrice >= 0");
+                table.HasCheckConstraint("CK_OrderItems_Quantity_Positive", "\"Quantity\" > 0");
+                table.HasCheckConstraint("CK_OrderItems_UnitPrice_NonNegative", "\"UnitPrice\" >= 0");
             });
             entity.HasOne(e => e.Order)
                   .WithMany(o => o.OrderItems)
