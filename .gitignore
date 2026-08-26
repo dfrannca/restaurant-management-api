@@ -1,0 +1,29 @@
+# .NET build output
+**/bin/
+**/obj/
+
+# Local databases and runtime files
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/*.log
+
+# Node dependencies and build output
+**/node_modules/
+**/.next/
+**/out/
+**/coverage/
+
+# Environment and secrets
+**/.env*
+!.env.example
+
+# IDE and OS files
+.vs/
+.vscode/
+**/*.csproj.user
+.DS_Store
+Thumbs.db
+
+# Temporary publish output
+publish-check*/

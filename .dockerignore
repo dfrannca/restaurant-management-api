@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+restaurante-frontend/node_modules/
+restaurante-frontend/.next/
+.git/
+*.db
+*.db-shm
+*.db-wal
