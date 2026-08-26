@@ -152,7 +152,7 @@ Use a raiz do repositório como contexto Docker. O arquivo `Dockerfile` já publ
 Configure estas variáveis de ambiente no serviço:
 
 ```text
-ConnectionStrings__DefaultConnection=<connection string do PostgreSQL>
+DATABASE_URL=<URL do PostgreSQL fornecida pelo Render>
 Jwt__Secret=<uma chave longa e aleatória>
 Cors__AllowedOrigin=https://<seu-projeto>.vercel.app
 ASPNETCORE_ENVIRONMENT=Production

@@ -11,6 +11,8 @@ using System.Text;
 using Restaurante.Infrastructure;
 using Restaurante.Infrastructure.Data;
 using System.Security.Claims;
+using Npgsql;
+using Uri = System.Uri;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,10 +33,12 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
 
 // Configure Authentication
-var jwtSecret = builder.Configuration["Jwt:Secret"];
-if (string.IsNullOrWhiteSpace(jwtSecret) && !builder.Environment.IsDevelopment())
+var jwtSecret = Environment.GetEnvironmentVariable("Jwt__Secret") ?? builder.Configuration["Jwt:Secret"];
+if (!builder.Environment.IsDevelopment() &&
+    (string.IsNullOrWhiteSpace(jwtSecret) || jwtSecret.Contains("SHOULD_BE_CHANGED", StringComparison.OrdinalIgnoreCase)))
 {
-    throw new InvalidOperationException("Jwt:Secret must be configured outside Development.");
+    throw new InvalidOperationException(
+        "JWT não configurado. No Render, defina Jwt__Secret com uma chave longa e aleatória.");
 }
 
 jwtSecret ??= "A_VERY_LONG_SECRET_KEY_FOR_JWT_THAT_SHOULD_BE_CHANGED_IN_PRODUCTION";
@@ -62,32 +66,27 @@ builder.Services.AddAuthentication(x =>
 builder.Services.AddHttpContextAccessor();
 
 // CORS
+var allowedOrigins = GetAllowedOrigins(builder.Environment, builder.Configuration["Cors:AllowedOrigin"]);
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        var allowedOrigin = builder.Configuration["Cors:AllowedOrigin"];
-        if (string.IsNullOrWhiteSpace(allowedOrigin))
-        {
-            if (!builder.Environment.IsDevelopment())
-            {
-                throw new InvalidOperationException("Cors:AllowedOrigin must be configured outside Development.");
-            }
-
-            policy.AllowAnyOrigin();
-        }
-        else
-        {
-            policy.WithOrigins(allowedOrigin);
-        }
-
+        policy.WithOrigins(allowedOrigins);
         policy.AllowAnyMethod().AllowAnyHeader();
     });
 });
 
 // Infrastructure
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? "Data Source=pedidos.db";
+var configuredDatabaseUrl = builder.Configuration["DATABASE_URL"];
+var connectionString = builder.Environment.IsDevelopment()
+    ? builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=pedidos.db"
+    : BuildProductionConnectionString(configuredDatabaseUrl ?? builder.Configuration.GetConnectionString("DefaultConnection"));
+
+if (!builder.Environment.IsDevelopment() && connectionString.StartsWith("Data Source", StringComparison.OrdinalIgnoreCase))
+{
+    throw new InvalidOperationException(
+        "Banco PostgreSQL não configurado. No Render, defina DATABASE_URL (ou ConnectionStrings__DefaultConnection) com a conexão do PostgreSQL; SQLite não é aceito em produção.");
+}
 builder.Services.AddInfrastructure(connectionString);
 
 // Application
@@ -301,3 +300,75 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+static string BuildProductionConnectionString(string? databaseUrl)
+{
+    if (string.IsNullOrWhiteSpace(databaseUrl))
+    {
+        throw new InvalidOperationException(
+            "DATABASE_URL não configurada. No Render, adicione a variável DATABASE_URL fornecida pelo PostgreSQL.");
+    }
+
+    if (!databaseUrl.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase) &&
+        !databaseUrl.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
+    {
+        return databaseUrl;
+    }
+
+    if (!Uri.TryCreate(databaseUrl, UriKind.Absolute, out var databaseUri) ||
+        string.IsNullOrWhiteSpace(databaseUri.Host) ||
+        string.IsNullOrWhiteSpace(databaseUri.AbsolutePath.Trim('/')))
+    {
+        throw new InvalidOperationException(
+            "DATABASE_URL inválida. Use a URL PostgreSQL fornecida pelo Render.");
+    }
+
+    var userInfo = databaseUri.UserInfo.Split(':', 2);
+    if (userInfo.Length != 2 || string.IsNullOrWhiteSpace(userInfo[0]) || string.IsNullOrWhiteSpace(userInfo[1]))
+    {
+        throw new InvalidOperationException(
+            "DATABASE_URL inválida. A URL PostgreSQL precisa conter usuário e senha fornecidos pelo Render.");
+    }
+
+    var connectionBuilder = new NpgsqlConnectionStringBuilder
+    {
+        Host = databaseUri.Host,
+        Port = databaseUri.Port > 0 ? databaseUri.Port : 5432,
+        Username = Uri.UnescapeDataString(userInfo[0]),
+        Password = Uri.UnescapeDataString(userInfo[1]),
+        Database = Uri.UnescapeDataString(databaseUri.AbsolutePath.Trim('/')),
+        SslMode = Npgsql.SslMode.Require
+    };
+
+    return connectionBuilder.ConnectionString;
+}
+
+static string[] GetAllowedOrigins(IWebHostEnvironment environment, string? configuredOrigin)
+{
+    var allowedOrigin = configuredOrigin?.Trim();
+    if (string.IsNullOrWhiteSpace(allowedOrigin))
+    {
+        if (environment.IsDevelopment())
+        {
+            return ["http://localhost:3000", "https://localhost:3000"];
+        }
+
+        throw new InvalidOperationException(
+            "CORS não configurado. No Render, defina Cors__AllowedOrigin com a URL HTTPS da Vercel, sem barra final (ex.: https://seu-projeto.vercel.app). Não use localhost.");
+    }
+
+    if (!Uri.TryCreate(allowedOrigin, UriKind.Absolute, out var originUri) ||
+        !string.Equals(originUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+        !string.IsNullOrEmpty(originUri.AbsolutePath.Trim('/')) ||
+        !string.IsNullOrEmpty(originUri.Query) ||
+        !string.IsNullOrEmpty(originUri.Fragment) ||
+        allowedOrigin.EndsWith('/') ||
+        originUri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+        originUri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase))
+    {
+        throw new InvalidOperationException(
+            "CORS inválido. No Render, defina Cors__AllowedOrigin como uma única URL HTTPS da Vercel, sem barra final e sem localhost.");
+    }
+
+    return [allowedOrigin];
+}
