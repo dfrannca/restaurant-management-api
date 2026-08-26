@@ -8,6 +8,9 @@ RUN dotnet publish Restaurante.API/Restaurante.API.csproj -c Release -o /app/pub
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 ENV DOTNET_USE_POLLING_FILE_WATCHER=true
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends libgssapi-krb5-2 \
+	&& rm -rf /var/lib/apt/lists/*
 EXPOSE 10000
 
 COPY --from=build /app/publish .
