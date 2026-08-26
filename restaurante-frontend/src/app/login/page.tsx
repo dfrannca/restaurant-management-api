@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChefHat, Lock, User, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { api } from '@/lib/api';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,19 +29,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5230/api';
-      const res = await fetch(`${apiUrl}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ message: 'Erro ao fazer login' }));
-        throw new Error(data.message || 'Usuário ou senha inválidos');
-      }
-
-      const data = await res.json();
+      const data = await api.login(username, password);
       sessionStorage.setItem('token', data.token);
       if (data.user) {
         sessionStorage.setItem('current_user', JSON.stringify(data.user));
@@ -48,7 +37,10 @@ export default function LoginPage() {
 
       router.replace('/');
     } catch (err) {
-      setError((err as Error).message || 'Erro inesperado. Tente novamente.');
+      const message = (err as Error).message;
+      setError(message === 'Failed to fetch'
+        ? 'Não foi possível conectar à API. Verifique NEXT_PUBLIC_API_URL na Vercel e o CORS no Render.'
+        : message || 'Erro inesperado. Tente novamente.');
     } finally {
       setLoading(false);
     }
