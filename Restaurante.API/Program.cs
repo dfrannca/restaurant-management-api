@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration.Json;
 using Restaurante.Application;
 using Restaurante.Domain.Entities;
 using Restaurante.Domain.Enums;
@@ -12,6 +13,17 @@ using Restaurante.Infrastructure.Data;
 using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
+
+foreach (var jsonSource in builder.Configuration.Sources.OfType<JsonConfigurationSource>())
+{
+    jsonSource.ReloadOnChange = false;
+}
+
+var renderPort = Environment.GetEnvironmentVariable("PORT") ?? "10000";
+if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")))
+{
+    builder.WebHost.UseUrls($"http://*:{renderPort}");
+}
 
 // Add services to the container
 builder.Services.AddControllers();

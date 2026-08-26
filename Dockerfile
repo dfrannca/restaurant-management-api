@@ -7,7 +7,7 @@ RUN dotnet publish Restaurante.API/Restaurante.API.csproj -c Release -o /app/pub
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
-ENV ASPNETCORE_HTTP_PORTS=10000
+ENV DOTNET_USE_POLLING_FILE_WATCHER=true
 EXPOSE 10000
 
 COPY --from=build /app/publish .
