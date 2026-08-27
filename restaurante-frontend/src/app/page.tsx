@@ -60,7 +60,7 @@ export default function Dashboard() {
   const loadTables = async () => {
     try {
       const data = await api.getTables();
-      setTables(data);
+      setTables([...data].sort((firstTable, secondTable) => firstTable.number - secondTable.number));
     } catch (error) {
       console.error('Failed to load tables:', error);
     } finally {
