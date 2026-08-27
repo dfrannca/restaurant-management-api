@@ -11,6 +11,7 @@ using System.Text;
 using Restaurante.Infrastructure;
 using Restaurante.Infrastructure.Data;
 using System.Security.Claims;
+using System.Diagnostics;
 using Npgsql;
 using Uri = System.Uri;
 

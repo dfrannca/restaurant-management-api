@@ -259,10 +259,7 @@ export default function Dashboard() {
             <h1 className="mt-1 font-heading text-3xl font-extrabold tracking-tight text-white">Dashboard de Mesas</h1>
             <p className="mt-1 text-slate-400">Acompanhe a operação e acesse os pedidos com agilidade.</p>
           </div>
-          <div className={`rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-widest ${cashRegister ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300' : 'border-amber-400/20 bg-amber-400/10 text-amber-300'}`}>
-            {cashRegister ? 'Caixa em operação' : 'Aguardando abertura de caixa'}
-          </div>
-          <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
+          <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto md:ml-auto">
             <div className="relative min-w-0 sm:w-72">
               <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-500" />
               <Input value={tableSearch} onChange={(event) => setTableSearch(event.target.value)} placeholder="Pesquisar mesa..." className="h-11 border-surface-light bg-surface/70 pl-9 text-white" />

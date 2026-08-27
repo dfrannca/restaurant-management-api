@@ -53,6 +53,7 @@ public class OrderRepository : Repository<Order>, IOrderRepository
 
     public async Task AddItemAndUpdateTotalAsync(Order order, OrderItem item)
     {
+        order.OrderItems.Add(item);
         _context.OrderItems.Add(item);
         UpdateTotal(order);
         await _context.SaveChangesAsync();

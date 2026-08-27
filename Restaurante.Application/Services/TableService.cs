@@ -181,7 +181,7 @@ public class TableService : ITableService
             Status = table.Status,
             Capacity = table.Capacity,
             Location = table.Location,
-            CurrentTotal = activeOrder?.TotalAmount ?? 0,
+            CurrentTotal = activeOrder?.OrderItems.Sum(item => item.Subtotal) ?? 0,
             OpenedAt = activeOrder?.OpenedAt,
             CustomerName = activeOrder?.CustomerName
         };

@@ -221,6 +221,8 @@ public class OrderService : IOrderService
         if (!order.OrderItems.Any())
             throw new InvalidOperationException("Cannot close an empty order");
 
+        order.TotalAmount = order.OrderItems.Sum(orderItem => orderItem.Subtotal);
+
         var user = await _userRepository.GetByIdAsync(dto.UserId);
         if (user == null)
             throw new KeyNotFoundException($"User with ID {dto.UserId} not found");
@@ -258,7 +260,7 @@ public class OrderService : IOrderService
             Observations = order.Observations,
             OpenedAt = order.OpenedAt,
             ClosedAt = order.ClosedAt,
-            TotalAmount = order.TotalAmount,
+            TotalAmount = order.OrderItems.Sum(orderItem => orderItem.Subtotal),
             PaymentMethod = order.PaymentMethod,
             IsClosed = order.IsClosed,
             CashRegisterId = order.CashRegisterId,

@@ -31,6 +31,7 @@ public class TableRepository : Repository<Table>, ITableRepository
         var stopwatch = Stopwatch.StartNew();
         var tables = await _dbSet
             .Include(table => table.Orders.Where(order => !order.IsClosed))
+                .ThenInclude(order => order.OrderItems)
             .AsNoTracking()
             .ToListAsync();
         _logger?.LogInformation("Tables list database query returned {Count} tables in {ElapsedMs} ms", tables.Count, stopwatch.ElapsedMilliseconds);

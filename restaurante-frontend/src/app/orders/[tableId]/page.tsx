@@ -27,9 +27,6 @@ export default function OrderPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [category, setCategory] = useState<number | null>(null);
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState<Product | null>(null);
-  const [qty, setQty] = useState(1);
-  const [note, setNote] = useState('');
   const [notes, setNotes] = useState<Record<number, string>>({});
   const [blocked, setBlocked] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -79,19 +76,21 @@ export default function OrderPage() {
     [products, category, search]
   );
 
-  async function add() {
-    if (!order || !selected || changingItems) return;
+  const orderTotal = useMemo(
+    () => order?.orderItems.reduce((sum, item) => sum + item.subtotal, 0) ?? 0,
+    [order?.orderItems]
+  );
+
+  async function addProduct(product: Product) {
+    if (!order || changingItems || blocked) return;
     setChangingItems(true);
-    console.time(`[order-item] add ${selected.id}`);
+    console.time(`[order-item] add ${product.id}`);
     try {
-      const updatedOrder = await api.addOrderItem(order.id, { productId: selected.id, quantity: qty, observations: note || undefined });
+      const updatedOrder = await api.addOrderItem(order.id, { productId: product.id, quantity: 1 });
       setOrder(updatedOrder);
       setNotes(Object.fromEntries(updatedOrder.orderItems.map(i => [i.id, i.observations ?? ''])));
-      console.timeEnd(`[order-item] add ${selected.id}`);
+      console.timeEnd(`[order-item] add ${product.id}`);
       console.info('[order-item] updated', { orderId: updatedOrder.id, items: updatedOrder.orderItems.length, total: updatedOrder.totalAmount });
-      setSelected(null);
-      setQty(1);
-      setNote('');
     } catch (error) {
       console.error('[order-item] add failed', error);
       alert((error as Error).message || 'Falha ao adicionar produto.');
@@ -156,8 +155,8 @@ export default function OrderPage() {
   }, [order, printRequested]);
 
   const received = Number(receivedText.replace(',', '.'));
-  const insufficient = method === PaymentMethod.Cash && (!receivedText || Number.isNaN(received) || !order || received < order.totalAmount);
-  const change = Number.isNaN(received) || !order ? 0 : Math.max(0, received - order.totalAmount);
+  const insufficient = method === PaymentMethod.Cash && (!receivedText || Number.isNaN(received) || !order || received < orderTotal);
+  const change = Number.isNaN(received) || !order ? 0 : Math.max(0, received - orderTotal);
 
   async function pay() {
     if (!order || !currentUser || method === null || insufficient || saving) return;
@@ -199,8 +198,6 @@ export default function OrderPage() {
       </div>
     );
 
-  const serviceCharge = order.totalAmount * 0.1;
-  const commandTotal = order.totalAmount + serviceCharge;
 
   return (
     <div className="min-h-screen bg-graphite pb-24">
@@ -226,7 +223,7 @@ export default function OrderPage() {
           </div>
           <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-right">
             <span className="label-uppercase text-amber-300">Total do pedido</span>
-            <p className="font-heading text-3xl font-extrabold text-amber-300">{money(order.totalAmount)}</p>
+            <p className="font-heading text-3xl font-extrabold text-amber-300">{money(orderTotal)}</p>
           </div>
         </div>
       </header>
@@ -282,7 +279,7 @@ export default function OrderPage() {
             )}
             <div className="mt-3 flex justify-between border-t border-white/8 pt-3">
               <span className="label-uppercase">Total</span>
-              <b className="font-heading text-2xl text-amber-300">{money(order.totalAmount)}</b>
+              <b className="font-heading text-2xl text-amber-300">{money(orderTotal)}</b>
             </div>
           </CardContent>
         </Card>
@@ -292,20 +289,6 @@ export default function OrderPage() {
             <CardTitle className="font-heading text-lg text-white">Resumo do pedido</CardTitle>
           </CardHeader>
           <CardContent className="relative flex h-[30rem] flex-col p-4">
-            <div className="mb-5 space-y-3 border-b border-white/8 pb-5">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-400">Subtotal</span>
-                <strong className="text-slate-100">{money(order.totalAmount)}</strong>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-400">Taxa de serviço (10%)</span>
-                <strong className="text-slate-100">{money(serviceCharge)}</strong>
-              </div>
-              <div className="flex items-center justify-between pt-2">
-                <span className="font-bold text-white">Total</span>
-                <strong className="font-heading text-3xl text-emerald-400">{money(commandTotal)}</strong>
-              </div>
-            </div>
             {blocked ? (
               <p className="m-auto text-slate-400">Abra o caixa para adicionar produtos.</p>
             ) : (
@@ -346,15 +329,12 @@ export default function OrderPage() {
                       list.map(p => (
                         <button
                           key={p.id}
-                          onClick={() => setSelected(p)}
-                          className={`rounded-xl border p-3 text-left transition-all ${
-                            selected?.id === p.id ? 'border-amber-400 bg-amber-400/10' : 'border-white/8 bg-surface-light/20 hover:border-white/20'
-                          }`}
+                          type="button"
+                          disabled={changingItems}
+                          onClick={() => void addProduct(p)}
+                          className="rounded-xl border border-white/8 bg-surface-light/20 p-3 text-left transition-all hover:border-amber-400/60 hover:bg-amber-400/10 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          <div className="flex justify-between gap-2">
-                            <b className="text-sm text-white">{p.name}</b>
-                            {selected?.id === p.id && <CheckCircle2 className="h-4 w-4 text-amber-300" />}
-                          </div>
+                          <b className="text-sm text-white">{p.name}</b>
                           <p className="mt-2 font-bold text-amber-300">{money(p.price)}</p>
                           <small className="text-emerald-400">DISPONÍVEL</small>
                         </button>
@@ -363,57 +343,6 @@ export default function OrderPage() {
                       <p className="col-span-full m-auto mt-10 text-center text-sm text-slate-400">Nenhum produto encontrado</p>
                     )}
                   </div>
-
-                  {selected && (
-                    <>
-                      <div className="absolute inset-0 z-40 bg-graphite/80 backdrop-blur-sm transition-opacity" onClick={() => setSelected(null)} />
-                      <div className="absolute inset-0 z-50 flex flex-col justify-between rounded-xl border border-amber-400/20 bg-graphite p-4 shadow-2xl transition-all duration-300 animate-in fade-in zoom-in-95">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <p className="text-lg font-semibold text-white">{selected.name}</p>
-                            <p className="text-lg text-amber-300">{money(selected.price)}</p>
-                          </div>
-                          <Button size="icon-sm" variant="ghost" onClick={() => setSelected(null)} className="text-slate-400">
-                            <X />
-                          </Button>
-                        </div>
-
-                        <div className="mt-4 flex-1 space-y-4">
-                          <div>
-                            <Label className="text-xs text-slate-400">Quantidade</Label>
-                            <div className="mt-1 flex items-center gap-3">
-                              <Button size="icon" variant="outline" onClick={() => setQty(Math.max(1, qty - 1))} className="h-10 w-10">
-                                <Minus />
-                              </Button>
-                              <b className="w-10 text-center text-xl text-white">{qty}</b>
-                              <Button size="icon" variant="outline" onClick={() => setQty(qty + 1)} className="h-10 w-10">
-                                <Plus />
-                              </Button>
-                            </div>
-                          </div>
-
-                          <div>
-                            <Label className="text-xs text-slate-400">Observação (opcional)</Label>
-                            <Input
-                              value={note}
-                              onChange={e => setNote(e.target.value)}
-                              placeholder="Ex: Sem cebola, ponto da carne..."
-                              className="mt-1 border-surface-light bg-graphite/30 text-white"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="mt-4 flex gap-3 border-t border-white/10 pt-4">
-                          <Button variant="outline" onClick={() => setSelected(null)} className="flex-1 py-6">
-                            Cancelar
-                          </Button>
-                          <Button onClick={add} disabled={changingItems} className="flex-1 bg-emerald-600 py-6 font-bold text-white hover:bg-emerald-500">
-                            {changingItems ? 'Salvando...' : 'Adicionar'}
-                          </Button>
-                        </div>
-                      </div>
-                    </>
-                  )}
                 </div>
               </>
             )}
@@ -426,7 +355,7 @@ export default function OrderPage() {
           <div className="container mx-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <span className="label-uppercase">Total a pagar</span>
-              <p className="font-heading text-xl font-bold text-amber-300">{money(order.totalAmount)}</p>
+              <p className="font-heading text-xl font-bold text-amber-300">{money(orderTotal)}</p>
             </div>
             <div className="flex gap-2">
               <Button disabled={!order.orderItems.length} onClick={printCommand} variant="outline" className="border-amber-400 text-amber-300 hover:bg-amber-400/10">
@@ -456,10 +385,7 @@ export default function OrderPage() {
           </div>
         ))}
         <hr />
-        <div className="print-command-item"><span>Subtotal</span><strong>{money(order.totalAmount)}</strong></div>
-        <div className="print-command-item"><span>Taxa de serviço</span><strong>{money(serviceCharge)}</strong></div>
-        <hr />
-        <div className="print-command-item print-command-total"><span>TOTAL</span><strong>{money(commandTotal)}</strong></div>
+        <div className="print-command-item print-command-total"><span>TOTAL</span><strong>{money(orderTotal)}</strong></div>
         <p>GARÇOM: {currentUser?.name || order.userName || 'Não informado'}</p>
         <hr />
         <h2>COMANDA ABERTA</h2>
@@ -521,7 +447,7 @@ export default function OrderPage() {
                     <span className="float-right">{money(i.subtotal)}</span>
                   </p>
                 ))}
-                <p className="mt-3 text-right font-heading text-2xl text-amber-300">{money(order.totalAmount)}</p>
+                <p className="mt-3 text-right font-heading text-2xl text-amber-300">{money(orderTotal)}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
