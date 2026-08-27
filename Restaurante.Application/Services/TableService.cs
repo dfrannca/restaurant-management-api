@@ -46,8 +46,12 @@ public class TableService : ITableService
 
     public async Task<IEnumerable<TableDto>> GetAllAsync()
     {
+        var stopwatch = Stopwatch.StartNew();
+        _logger.LogInformation("Tables list: database query started at {StartedAt}", DateTime.UtcNow);
         var tables = await _tableRepository.GetAllWithActiveOrdersAsync();
-        return tables.Select(table => MapToDto(table, table.Orders.FirstOrDefault())).ToList();
+        var result = tables.Select(table => MapToDto(table, table.Orders.FirstOrDefault())).ToList();
+        _logger.LogInformation("Tables list: database query completed at {CompletedAt}, {ElapsedMs} ms, {Count} tables", DateTime.UtcNow, stopwatch.ElapsedMilliseconds, result.Count);
+        return result;
     }
 
     public async Task<TableDto> CreateAsync(CreateTableDto dto)

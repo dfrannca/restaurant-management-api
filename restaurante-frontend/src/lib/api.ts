@@ -19,6 +19,7 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
 
   const response = await fetch(url, {
     ...options,
+    cache: options?.method === 'GET' || !options?.method ? 'no-store' : options.cache,
     headers,
   });
 

@@ -2,13 +2,18 @@ using Microsoft.EntityFrameworkCore;
 using Restaurante.Domain.Entities;
 using Restaurante.Domain.Interfaces;
 using Restaurante.Infrastructure.Data;
+using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 
 namespace Restaurante.Infrastructure.Repositories;
 
 public class TableRepository : Repository<Table>, ITableRepository
 {
-    public TableRepository(AppDbContext context) : base(context)
+    private readonly ILogger<TableRepository>? _logger;
+
+    public TableRepository(AppDbContext context, ILogger<TableRepository>? logger = null) : base(context)
     {
+        _logger = logger;
     }
 
     public async Task<Table?> GetByNumberAsync(int number)
@@ -23,10 +28,13 @@ public class TableRepository : Repository<Table>, ITableRepository
 
     public async Task<IEnumerable<Table>> GetAllWithActiveOrdersAsync()
     {
-        return await _dbSet
+        var stopwatch = Stopwatch.StartNew();
+        var tables = await _dbSet
             .Include(table => table.Orders.Where(order => !order.IsClosed))
             .AsNoTracking()
             .ToListAsync();
+        _logger?.LogInformation("Tables list database query returned {Count} tables in {ElapsedMs} ms", tables.Count, stopwatch.ElapsedMilliseconds);
+        return tables;
     }
 
     public async Task OpenWithOrderAsync(Table table, Order order)

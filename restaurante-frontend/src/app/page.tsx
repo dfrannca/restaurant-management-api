@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { Table, TableStatus, CashRegister } from '@/types';
@@ -31,7 +31,7 @@ export default function Dashboard() {
   const [registerBannerBlocked, setRegisterBannerBlocked] = useState(false);
   const [openingTableId, setOpeningTableId] = useState<number | null>(null);
 
-  async function checkRegisterAndLoad() {
+  const checkRegisterAndLoad = useCallback(async () => {
     try {
       setIsCheckingRegister(true);
       const register = await api.getOpenCashRegister();
@@ -55,18 +55,24 @@ export default function Dashboard() {
     } finally {
       setIsCheckingRegister(false);
     }
-  }
+  }, [registerBannerBlocked]);
 
-  const loadTables = async () => {
+  const loadTables = useCallback(async () => {
+    console.time('[tables] load');
+    console.info('[tables] load started', { at: new Date().toISOString() });
     try {
       const data = await api.getTables();
-      setTables([...data].sort((firstTable, secondTable) => firstTable.number - secondTable.number));
+      console.info('[tables] API response', { at: new Date().toISOString(), count: data.length });
+      const sortedTables = [...data].sort((firstTable, secondTable) => firstTable.number - secondTable.number);
+      setTables(sortedTables);
+      console.info('[tables] state updated', { at: new Date().toISOString(), count: sortedTables.length });
     } catch (error) {
       console.error('Failed to load tables:', error);
     } finally {
+      console.timeEnd('[tables] load');
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (loadingUsers || !token) {
@@ -82,7 +88,15 @@ export default function Dashboard() {
       clearTimeout(initialLoad);
       window.removeEventListener('cashRegisterChanged', checkRegisterAndLoad);
     };
-  }, [loadingUsers, token]);
+  }, [checkRegisterAndLoad, loadTables, loadingUsers, token]);
+
+  useEffect(() => {
+    console.info('[tables] list rendered', {
+      at: new Date().toISOString(),
+      count: tables.length,
+      actions: tables.map((table) => ({ id: table.id, status: table.status, manage: table.status !== TableStatus.Free }))
+    });
+  }, [tables]);
 
   const handleOpenTable = async (tableId: number) => {
     setOpeningTableId(tableId);
@@ -402,7 +416,7 @@ export default function Dashboard() {
                       }
                     }}
                   >
-                    {table.status === TableStatus.Free ? 'Abrir Mesa' : 'Gerenciar Pedido'}
+                    {table.status === TableStatus.Free ? 'Abrir Mesa' : 'Gerenciar Mesa'}
                   </Button>
                 </div>
               </CardContent>
