@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useUser } from '@/context/UserContext';
-import { AlertCircle, Armchair, CircleDollarSign, Clock3, Users } from 'lucide-react';
+import { AlertCircle, Armchair, CircleDollarSign, Clock3, Users, Search, RefreshCw, ClipboardList, Plus } from 'lucide-react';
 
 export default function Dashboard() {
   const router = useRouter();
@@ -30,6 +30,7 @@ export default function Dashboard() {
   const [openingBalance, setOpeningBalance] = useState('');
   const [registerBannerBlocked, setRegisterBannerBlocked] = useState(false);
   const [openingTableId, setOpeningTableId] = useState<number | null>(null);
+  const [tableSearch, setTableSearch] = useState('');
 
   const checkRegisterAndLoad = useCallback(async () => {
     try {
@@ -246,6 +247,7 @@ export default function Dashboard() {
   const freeTables = tables.filter((table) => table.status === TableStatus.Free).length;
   const occupiedTables = tables.filter((table) => table.status === TableStatus.Occupied).length;
   const openTotal = tables.reduce((total, table) => total + (table.currentTotal ?? 0), 0);
+  const visibleTables = tables.filter((table) => String(table.number).includes(tableSearch.trim()));
 
   return (
     <div className="min-h-0 flex-1 bg-graphite flex flex-col">
@@ -259,6 +261,15 @@ export default function Dashboard() {
           </div>
           <div className={`rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-widest ${cashRegister ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-300' : 'border-amber-400/20 bg-amber-400/10 text-amber-300'}`}>
             {cashRegister ? 'Caixa em operação' : 'Aguardando abertura de caixa'}
+          </div>
+          <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
+            <div className="relative min-w-0 sm:w-72">
+              <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-500" />
+              <Input value={tableSearch} onChange={(event) => setTableSearch(event.target.value)} placeholder="Pesquisar mesa..." className="h-11 border-surface-light bg-surface/70 pl-9 text-white" />
+            </div>
+            <Button variant="outline" onClick={() => void loadTables()} className="h-11 border-surface-light bg-surface/40 text-slate-200 hover:border-accent hover:text-white">
+              <RefreshCw className="h-4 w-4" /> Atualizar
+            </Button>
           </div>
         </div>
       </div>
@@ -313,14 +324,14 @@ export default function Dashboard() {
           </div>
         </section>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
-          {tables.length === 0 ? (
+          {visibleTables.length === 0 ? (
             <p className="col-span-full py-12 text-center text-slate-400">Nenhuma mesa cadastrada.</p>
-          ) : tables.map((table) => (
+          ) : visibleTables.map((table) => (
             <Card
               key={table.id}
               className={`${getStatusBorderColor(table.status)} flex min-h-[320px] flex-col overflow-visible rounded-2xl border-y border-r border-white/7 bg-surface/90 shadow-xl shadow-black/15 ring-0 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl`}
             >
-              <CardHeader className="border-b border-surface-light/40 bg-surface-light/30 px-4 py-3">
+              <CardHeader className="border-b border-surface-light/40 bg-surface-light/30 px-4 py-4">
                 <div className="flex items-center justify-between">
                   <CardTitle className="font-heading text-2xl font-extrabold tracking-tight text-white">
                     Mesa {table.number}
@@ -336,16 +347,18 @@ export default function Dashboard() {
                 <div className="flex min-h-0 flex-1 flex-col space-y-2">
                   {table.status !== TableStatus.Free && (
                     <>
-                      {table.customerName && (
-                        <div className="rounded-xl border border-surface-light/50 bg-surface-light/40 px-3 py-2">
-                          <span className="label-uppercase text-amber-400">Cliente</span>
-                          <p className="mt-1 text-sm font-medium text-slate-100">{table.customerName}</p>
-                        </div>
-                      )}
+                      <div className="flex items-center justify-between border-b border-white/8 py-2 text-sm">
+                        <span className="text-slate-400">Cliente</span>
+                        <span className="max-w-[60%] truncate font-medium text-slate-100">{table.customerName || 'Não informado'}</span>
+                      </div>
+                      <div className="flex items-center justify-between border-b border-white/8 py-2 text-sm">
+                        <span className="text-slate-400">Itens</span>
+                        <span className="font-medium text-slate-100">{table.currentTotal && table.currentTotal > 0 ? 'Pedido aberto' : 'Sem itens'}</span>
+                      </div>
                       {table.currentTotal !== undefined && table.currentTotal > 0 && (
-                        <div className="rounded-xl border border-accent/30 bg-accent/10 px-3 py-2 text-center">
-                          <span className="label-uppercase text-accent">Total</span>
-                          <p className="mt-1 text-xl font-extrabold text-accent">
+                        <div className="flex items-center justify-between border-b border-white/8 py-2 text-sm">
+                          <span className="text-slate-400">Total</span>
+                          <p className="font-extrabold text-accent">
                             {formatCurrency(table.currentTotal)}
                           </p>
                         </div>
@@ -440,7 +453,7 @@ export default function Dashboard() {
                       }
                     }}
                   >
-                    {table.status === TableStatus.Free ? 'Abrir Mesa' : 'Gerenciar Mesa'}
+                    {table.status === TableStatus.Free ? <><Plus className="h-4 w-4" /> Abrir Mesa</> : <><ClipboardList className="h-4 w-4" /> Gerenciar Mesa</>}
                   </Button>
                 </div>
               </CardContent>

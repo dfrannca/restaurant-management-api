@@ -289,13 +289,28 @@ export default function OrderPage() {
 
         <Card className="glass-panel min-h-[36rem] rounded-2xl border-0">
           <CardHeader className="border-b border-white/8">
-            <CardTitle className="font-heading text-lg text-white">Adicionar produto</CardTitle>
+            <CardTitle className="font-heading text-lg text-white">Resumo do pedido</CardTitle>
           </CardHeader>
           <CardContent className="relative flex h-[30rem] flex-col p-4">
+            <div className="mb-5 space-y-3 border-b border-white/8 pb-5">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">Subtotal</span>
+                <strong className="text-slate-100">{money(order.totalAmount)}</strong>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">Taxa de serviço (10%)</span>
+                <strong className="text-slate-100">{money(serviceCharge)}</strong>
+              </div>
+              <div className="flex items-center justify-between pt-2">
+                <span className="font-bold text-white">Total</span>
+                <strong className="font-heading text-3xl text-emerald-400">{money(commandTotal)}</strong>
+              </div>
+            </div>
             {blocked ? (
               <p className="m-auto text-slate-400">Abra o caixa para adicionar produtos.</p>
             ) : (
               <>
+                <p className="label-uppercase mb-2 text-amber-300">Adicionar produto</p>
                 <div className="relative">
                   <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                   <Input
