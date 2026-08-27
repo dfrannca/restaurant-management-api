@@ -294,7 +294,7 @@ export default function Dashboard() {
           {tables.map((table) => (
             <Card
               key={table.id}
-              className={`${getStatusBorderColor(table.status)} flex h-[320px] flex-col overflow-hidden rounded-2xl border-y border-r border-white/7 bg-surface/90 shadow-xl shadow-black/15 ring-0 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl`}
+              className={`${getStatusBorderColor(table.status)} flex min-h-[320px] flex-col overflow-visible rounded-2xl border-y border-r border-white/7 bg-surface/90 shadow-xl shadow-black/15 ring-0 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl`}
             >
               <CardHeader className="border-b border-surface-light/40 bg-surface-light/30 px-4 py-3">
                 <div className="flex items-center justify-between">
