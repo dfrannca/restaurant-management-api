@@ -17,7 +17,7 @@ export default function Dashboard() {
   const router = useRouter();
   const { currentUser, token, loadingUsers } = useUser();
   const [tables, setTables] = useState<Table[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [tablesLoaded, setTablesLoaded] = useState(false);
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [customerName, setCustomerName] = useState('');
   const [observations, setObservations] = useState('');
@@ -66,7 +66,7 @@ export default function Dashboard() {
       console.error('Failed to load tables:', error);
     } finally {
       console.timeEnd('[tables] load');
-      setLoading(false);
+      setTablesLoaded(true);
     }
   }, []);
 
@@ -213,6 +213,17 @@ export default function Dashboard() {
     return `${minutes}m`;
   };
 
+  if (!tablesLoaded) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-graphite">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+          <p className="text-slate-400 label-uppercase">Carregando mesas...</p>
+        </div>
+      </div>
+    );
+  }
+
   const isBlocked = !cashRegister;
   const freeTables = tables.filter((table) => table.status === TableStatus.Free).length;
   const occupiedTables = tables.filter((table) => table.status === TableStatus.Occupied).length;
@@ -276,11 +287,7 @@ export default function Dashboard() {
           </div>
         </section>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
-          {tables.length === 0 && loading ? (
-            Array.from({ length: 4 }, (_, index) => (
-              <div key={index} className="h-[320px] animate-pulse rounded-2xl border border-white/8 bg-surface/70" aria-label="Carregando mesa" />
-            ))
-          ) : tables.length === 0 ? (
+          {tables.length === 0 ? (
             <p className="col-span-full py-12 text-center text-slate-400">Nenhuma mesa cadastrada.</p>
           ) : tables.map((table) => (
             <Card
