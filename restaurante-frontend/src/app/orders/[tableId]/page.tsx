@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUser } from '@/context/UserContext';
-import { CheckCircle2, Minus, Plus, Search, Trash2, X, Clock, Printer } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Minus, Plus, Search, Trash2, X, Clock, Printer } from 'lucide-react';
 
 const money = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 const paymentName = (v: PaymentMethod | null) => ({ 0: 'Dinheiro', 1: 'Pix', 2: 'Cartão de débito', 3: 'Cartão de crédito' }[v ?? 0]);
@@ -206,15 +206,22 @@ export default function OrderPage() {
     <div className="min-h-screen bg-graphite pb-24">
       <header className="border-b border-white/8 bg-graphite/85">
         <div className="container mx-auto flex flex-col justify-between gap-4 px-4 py-5 sm:flex-row sm:px-6">
-          <div>
-            <Button variant="ghost" onClick={() => router.push('/')} className="-ml-3 text-slate-400">
-              ← Voltar
+          <div className="flex flex-col items-start gap-4">
+            <Button
+              variant="outline"
+              onClick={() => router.push('/')}
+              className="min-h-10 border-surface-light bg-surface-light/30 px-3 text-slate-200 hover:border-amber-400/60 hover:bg-amber-400/10 hover:text-white focus-visible:ring-2 focus-visible:ring-amber-400"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              Voltar
             </Button>
-            <p className="label-uppercase text-amber-400">Pedido em andamento</p>
-            <h1 className="font-heading text-3xl font-extrabold text-white">Mesa {order.tableNumber}</h1>
-            <div className="mt-3 flex items-center gap-2 text-sm text-slate-400">
-              <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
-              <span>{getOrderStatus(order.openedAt, order.isClosed)}</span>
+            <div className="flex flex-col items-start gap-0.5">
+              <p className="label-uppercase text-amber-400">Pedido em andamento</p>
+              <h1 className="font-heading text-3xl font-extrabold leading-tight text-white">Mesa {order.tableNumber}</h1>
+              <div className="mt-2 flex items-center gap-2 text-sm text-slate-400">
+                <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>{getOrderStatus(order.openedAt, order.isClosed)}</span>
+              </div>
             </div>
           </div>
           <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-right">
