@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { Category, Order, PaymentMethod, Product } from '@/types';
@@ -38,6 +39,7 @@ export default function OrderPage() {
   const [saving, setSaving] = useState(false);
   const [changingItems, setChangingItems] = useState(false);
   const [paid, setPaid] = useState(false);
+  const [printRequested, setPrintRequested] = useState(false);
 
   const load = useCallback(async () => {
     console.time('[tables/order] load');
@@ -134,8 +136,24 @@ export default function OrderPage() {
       return;
     }
     console.info('[command] print requested', { orderId: currentOrder.id, user: currentUser?.name ?? 'Não informado' });
-    window.print();
+    setPrintRequested(true);
   }
+
+  useEffect(() => {
+    if (!printRequested || !order?.orderItems.length) return;
+
+    const restoreAfterPrint = () => {
+      setPrintRequested(false);
+      console.info('[command] print closed', { orderId: order.id });
+    };
+    const frame = window.requestAnimationFrame(() => window.print());
+    window.addEventListener('afterprint', restoreAfterPrint);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('afterprint', restoreAfterPrint);
+    };
+  }, [order, printRequested]);
 
   const received = Number(receivedText.replace(',', '.'));
   const insufficient = method === PaymentMethod.Cash && (!receivedText || Number.isNaN(received) || !order || received < order.totalAmount);
@@ -407,7 +425,7 @@ export default function OrderPage() {
         </div>
       )}
 
-      <section className="print-command" aria-hidden="true">
+      {typeof document !== 'undefined' && createPortal(<section className="print-command" aria-hidden="true">
         <h1>BAR &amp; CHURRASCARIA</h1>
         <h2>PROGRESSO</h2>
         <hr />
@@ -430,7 +448,7 @@ export default function OrderPage() {
         <p>GARÇOM: {currentUser?.name || order.userName || 'Não informado'}</p>
         <hr />
         <h2>COMANDA ABERTA</h2>
-      </section>
+      </section>, document.body)}
 
       <Dialog 
         open={paymentOpen} 
@@ -470,8 +488,8 @@ export default function OrderPage() {
                 >
                   Fechar
                 </Button>
-                <Button variant="outline" onClick={() => window.print()}>
-                  Imprimir comprovante
+                <Button variant="outline" onClick={printCommand}>
+                  Imprimir Comanda
                 </Button>
               </div>
             </div>
