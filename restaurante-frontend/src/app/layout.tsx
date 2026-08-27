@@ -35,7 +35,7 @@ export default function RootLayout({
         <UserProvider>
           <Navbar />
           <div className="flex-1 flex flex-col">{children}</div>
-          <footer className="border-t border-white/8 bg-graphite px-6 py-4 text-center text-xs text-slate-500">
+          <footer className="border-t border-white/8 bg-graphite px-6 py-2 text-center text-[10px] text-slate-500">
             Marcos D&apos;França — Todos os direitos reservados
           </footer>
         </UserProvider>

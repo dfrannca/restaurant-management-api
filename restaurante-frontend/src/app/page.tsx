@@ -53,7 +53,6 @@ export default function Dashboard() {
       }
     } finally {
       setIsCheckingRegister(false);
-      loadTables();
     }
   }
 
@@ -73,7 +72,10 @@ export default function Dashboard() {
       return;
     }
 
-    const initialLoad = window.setTimeout(checkRegisterAndLoad, 0);
+    const initialLoad = window.setTimeout(() => {
+      void checkRegisterAndLoad();
+      void loadTables();
+    }, 0);
     window.addEventListener('cashRegisterChanged', checkRegisterAndLoad);
     return () => {
       clearTimeout(initialLoad);
@@ -207,7 +209,7 @@ export default function Dashboard() {
   const openTotal = tables.reduce((total, table) => total + (table.currentTotal ?? 0), 0);
 
   return (
-    <div className="min-h-screen bg-graphite flex flex-col">
+    <div className="min-h-0 flex-1 bg-graphite flex flex-col">
       {/* Title & Register Banner */}
       <div className="container mx-auto px-6 pt-8 pb-4">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -267,7 +269,7 @@ export default function Dashboard() {
           {tables.map((table) => (
             <Card
               key={table.id}
-              className={`${getStatusBorderColor(table.status)} flex h-[380px] flex-col overflow-hidden rounded-2xl border-y border-r border-white/7 bg-surface/90 shadow-xl shadow-black/15 ring-0 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl`}
+              className={`${getStatusBorderColor(table.status)} flex h-[440px] flex-col overflow-hidden rounded-2xl border-y border-r border-white/7 bg-surface/90 shadow-xl shadow-black/15 ring-0 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl`}
             >
               <CardHeader className="border-b border-surface-light/40 bg-surface-light/30 pb-4">
                 <div className="flex items-center justify-between">
