@@ -89,11 +89,17 @@ export default function Dashboard() {
     setIsDialogOpen(false);
 
     try {
-      await api.openTable(tableId, { customerName, observations });
+      console.time(`[table-opening] ${tableId}`);
+      const openedTable = await api.openTable(tableId, { customerName, observations });
+      console.timeEnd(`[table-opening] ${tableId}`);
+      console.info('[table-opening] confirmed', { tableId });
       setCustomerName('');
       setObservations('');
-      setSelectedTable(null);
-      void loadTables();
+      setTables((currentTables) => currentTables.map((table) => (
+        table.id === openedTable.id ? openedTable : table
+      )));
+      setSelectedTable(openedTable);
+      router.push(`/orders/${openedTable.id}`);
     } catch (error) {
       console.error('Failed to open table:', error);
       alert((error as Error).message || 'Falha ao abrir mesa');

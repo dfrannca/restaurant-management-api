@@ -2,6 +2,8 @@ using FluentValidation;
 using Restaurante.Application.DTOs;
 using Restaurante.Domain.Entities;
 using Restaurante.Domain.Interfaces;
+using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 
 namespace Restaurante.Application.Services;
 
@@ -13,6 +15,7 @@ public class TableService : ITableService
     private readonly IValidator<CreateTableDto> _createValidator;
     private readonly IValidator<UpdateTableDto> _updateValidator;
     private readonly IValidator<OpenTableDto> _openValidator;
+    private readonly ILogger<TableService> _logger;
 
     public TableService(
         ITableRepository tableRepository,
@@ -20,7 +23,8 @@ public class TableService : ITableService
         ICashRegisterRepository cashRegisterRepository,
         IValidator<CreateTableDto> createValidator,
         IValidator<UpdateTableDto> updateValidator,
-        IValidator<OpenTableDto> openValidator)
+        IValidator<OpenTableDto> openValidator,
+        ILogger<TableService> logger)
     {
         _tableRepository = tableRepository;
         _orderRepository = orderRepository;
@@ -28,6 +32,7 @@ public class TableService : ITableService
         _createValidator = createValidator;
         _updateValidator = updateValidator;
         _openValidator = openValidator;
+        _logger = logger;
     }
 
     public async Task<TableDto> GetByIdAsync(int id)
@@ -41,15 +46,8 @@ public class TableService : ITableService
 
     public async Task<IEnumerable<TableDto>> GetAllAsync()
     {
-        var tables = await _tableRepository.GetAllAsync();
-        var dtos = new List<TableDto>();
-        
-        foreach (var table in tables)
-        {
-            dtos.Add(await MapToDtoAsync(table));
-        }
-        
-        return dtos;
+        var tables = await _tableRepository.GetAllWithActiveOrdersAsync();
+        return tables.Select(table => MapToDto(table, table.Orders.FirstOrDefault())).ToList();
     }
 
     public async Task<TableDto> CreateAsync(CreateTableDto dto)
@@ -103,13 +101,17 @@ public class TableService : ITableService
 
     public async Task<TableDto> OpenTableAsync(int id, OpenTableDto dto)
     {
+        var stopwatch = Stopwatch.StartNew();
         await _openValidator.ValidateAndThrowAsync(dto);
+        _logger.LogInformation("Table opening {TableId}: validation completed at {ElapsedMs} ms", id, stopwatch.ElapsedMilliseconds);
 
         var openCashRegister = await _cashRegisterRepository.GetOpenCashRegisterAsync();
+        _logger.LogInformation("Table opening {TableId}: cash register lookup completed at {ElapsedMs} ms", id, stopwatch.ElapsedMilliseconds);
         if (openCashRegister == null)
             throw new InvalidOperationException("Não é permitido abrir mesas/pedidos sem um caixa aberto.");
 
         var table = await _tableRepository.GetByIdAsync(id);
+        _logger.LogInformation("Table opening {TableId}: table lookup completed at {ElapsedMs} ms", id, stopwatch.ElapsedMilliseconds);
         if (table == null)
             throw new KeyNotFoundException($"Table with ID {id} not found");
 
@@ -117,6 +119,7 @@ public class TableService : ITableService
             throw new InvalidOperationException("Table is not available");
 
         var activeOrder = await _orderRepository.GetActiveOrderByTableIdAsync(id);
+        _logger.LogInformation("Table opening {TableId}: active order lookup completed at {ElapsedMs} ms", id, stopwatch.ElapsedMilliseconds);
         if (activeOrder != null)
             throw new InvalidOperationException("Table already has an active order");
 
@@ -131,13 +134,12 @@ public class TableService : ITableService
             CashRegisterId = openCashRegister.Id
         };
 
-        await _orderRepository.AddAsync(order);
-
         table.Status = Domain.Enums.TableStatus.Occupied;
         table.UpdatedAt = DateTime.UtcNow;
-        await _tableRepository.UpdateAsync(table);
+        await _tableRepository.OpenWithOrderAsync(table, order);
+        _logger.LogInformation("Table opening {TableId}: transaction committed at {ElapsedMs} ms", id, stopwatch.ElapsedMilliseconds);
 
-        return await MapToDtoAsync(table);
+        return MapToDto(table, order);
     }
 
     public async Task<TableDto> CloseTableAsync(int id)
@@ -163,7 +165,11 @@ public class TableService : ITableService
     private async Task<TableDto> MapToDtoAsync(Table table)
     {
         var activeOrder = await _orderRepository.GetActiveOrderByTableIdAsync(table.Id);
-        
+        return MapToDto(table, activeOrder);
+    }
+
+    private static TableDto MapToDto(Table table, Order? activeOrder)
+    {
         return new TableDto
         {
             Id = table.Id,

@@ -231,6 +231,11 @@ namespace Restaurante.Infrastructure.Migrations
 
                     b.HasIndex("TableId", "IsClosed");
 
+                    b.HasIndex("TableId")
+                        .IsUnique()
+                        .HasFilter("\"IsClosed\" = false")
+                        .HasDatabaseName("IX_Orders_TableId_Active");
+
                     b.ToTable("Orders");
                 });
 

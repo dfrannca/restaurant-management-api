@@ -81,6 +81,9 @@ public class AppDbContext : DbContext
             entity.Property(e => e.CustomerName).HasMaxLength(100);
             entity.Property(e => e.Observations).HasMaxLength(500);
             entity.HasIndex(e => new { e.TableId, e.IsClosed });
+            entity.HasIndex(e => e.TableId)
+                .IsUnique()
+                .HasFilter("\"IsClosed\" = false");
             entity.HasIndex(e => new { e.CashRegisterId, e.IsClosed });
             entity.HasIndex(e => e.ClosedAt);
             entity.HasOne(e => e.Table)

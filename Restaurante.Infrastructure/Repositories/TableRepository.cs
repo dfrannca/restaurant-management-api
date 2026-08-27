@@ -20,4 +20,29 @@ public class TableRepository : Repository<Table>, ITableRepository
     {
         return await _dbSet.Where(t => t.Status == status).ToListAsync();
     }
+
+    public async Task<IEnumerable<Table>> GetAllWithActiveOrdersAsync()
+    {
+        return await _dbSet
+            .Include(table => table.Orders.Where(order => !order.IsClosed))
+            .AsNoTracking()
+            .ToListAsync();
+    }
+
+    public async Task OpenWithOrderAsync(Table table, Order order)
+    {
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+        try
+        {
+            _context.Orders.Add(order);
+            _dbSet.Update(table);
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+        }
+        catch (DbUpdateException exception)
+        {
+            await transaction.RollbackAsync();
+            throw new InvalidOperationException("Table was opened by another user.", exception);
+        }
+    }
 }

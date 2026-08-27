@@ -280,6 +280,13 @@ namespace Restaurante.Infrastructure.Migrations
                 columns: new[] { "TableId", "IsClosed" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_Orders_TableId_Active",
+                table: "Orders",
+                column: "TableId",
+                unique: true,
+                filter: "\"IsClosed\" = false");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Orders_UserId",
                 table: "Orders",
                 column: "UserId");
