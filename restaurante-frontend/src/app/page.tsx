@@ -267,7 +267,7 @@ export default function Dashboard() {
           {tables.map((table) => (
             <Card
               key={table.id}
-              className={`${getStatusBorderColor(table.status)} overflow-hidden rounded-2xl border-y border-r border-white/7 bg-surface/90 shadow-xl shadow-black/15 ring-0 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl`}
+              className={`${getStatusBorderColor(table.status)} flex h-[380px] flex-col overflow-hidden rounded-2xl border-y border-r border-white/7 bg-surface/90 shadow-xl shadow-black/15 ring-0 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl`}
             >
               <CardHeader className="border-b border-surface-light/40 bg-surface-light/30 pb-4">
                 <div className="flex items-center justify-between">
@@ -281,8 +281,8 @@ export default function Dashboard() {
                   </Badge>
                 </div>
               </CardHeader>
-              <CardContent className="pt-5">
-                <div className="space-y-4">
+              <CardContent className="flex min-h-0 flex-1 flex-col pt-5">
+                <div className="flex min-h-0 flex-1 flex-col space-y-4">
                   {table.status !== TableStatus.Free && (
                     <>
                       {table.customerName && (

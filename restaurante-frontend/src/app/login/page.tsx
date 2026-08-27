@@ -155,15 +155,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Hint */}
-          <p className="mt-6 text-center text-xs text-slate-600">
-            Credenciais padrão: <span className="text-slate-500 font-mono">admin</span> / <span className="text-slate-500 font-mono">admin</span>
-          </p>
         </div>
-
-        <p className="mt-6 text-center text-xs text-slate-700">
-          © {new Date().getFullYear()} Bar e Churrascaria Progresso
-        </p>
       </div>
     </div>
   );
