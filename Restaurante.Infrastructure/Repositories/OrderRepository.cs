@@ -51,6 +51,34 @@ public class OrderRepository : Repository<Order>, IOrderRepository
             .FirstOrDefaultAsync(o => o.TableId == tableId && !o.IsClosed);
     }
 
+    public async Task AddItemAndUpdateTotalAsync(Order order, OrderItem item)
+    {
+        _context.OrderItems.Add(item);
+        UpdateTotal(order);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task UpdateItemAndTotalAsync(Order order, OrderItem item)
+    {
+        _context.OrderItems.Update(item);
+        UpdateTotal(order);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task RemoveItemAndTotalAsync(Order order, OrderItem item)
+    {
+        _context.OrderItems.Remove(item);
+        order.OrderItems.Remove(item);
+        UpdateTotal(order);
+        await _context.SaveChangesAsync();
+    }
+
+    private static void UpdateTotal(Order order)
+    {
+        order.TotalAmount = order.OrderItems.Sum(orderItem => orderItem.Subtotal);
+        order.UpdatedAt = DateTime.UtcNow;
+    }
+
     public override async Task<Order?> GetByIdAsync(int id)
     {
         return await _dbSet

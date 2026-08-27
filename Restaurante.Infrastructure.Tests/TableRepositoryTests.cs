@@ -69,5 +69,23 @@ public sealed class TableRepositoryTests : IDisposable
         Assert.Equal(1, await secondContext.Orders.CountAsync(order => !order.IsClosed));
     }
 
+    [Fact]
+    public async Task AddItemAndUpdateTotalAsync_PersistsItemAndRecalculatesOrderTotal()
+    {
+        await using var context = new AppDbContext(_options);
+        var category = new Category { Name = "Teste" };
+        var product = new Product { Name = "Produto teste", Description = "Teste", Price = 12.50m, Category = category };
+        var order = new Order { Table = new Table { Number = 1 }, TotalAmount = 0 };
+        context.Products.Add(product);
+        context.Orders.Add(order);
+        await context.SaveChangesAsync();
+
+        var item = new OrderItem { OrderId = order.Id, ProductId = product.Id, UnitPrice = product.Price, Quantity = 2, Subtotal = 25m };
+        await new OrderRepository(context).AddItemAndUpdateTotalAsync(order, item);
+
+        Assert.Equal(25m, order.TotalAmount);
+        Assert.Equal(1, await context.OrderItems.CountAsync());
+    }
+
     public void Dispose() => _connection.Dispose();
 }

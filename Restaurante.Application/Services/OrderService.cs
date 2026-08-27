@@ -2,13 +2,14 @@ using FluentValidation;
 using Restaurante.Application.DTOs;
 using Restaurante.Domain.Entities;
 using Restaurante.Domain.Interfaces;
+using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 
 namespace Restaurante.Application.Services;
 
 public class OrderService : IOrderService
 {
     private readonly IOrderRepository _orderRepository;
-    private readonly IOrderItemRepository _orderItemRepository;
     private readonly ITableRepository _tableRepository;
     private readonly IProductRepository _productRepository;
     private readonly ICashRegisterRepository _cashRegisterRepository;
@@ -17,10 +18,10 @@ public class OrderService : IOrderService
     private readonly IValidator<AddOrderItemDto> _addItemValidator;
     private readonly IValidator<UpdateOrderItemDto> _updateItemValidator;
     private readonly IValidator<CloseOrderDto> _closeValidator;
+    private readonly ILogger<OrderService> _logger;
 
     public OrderService(
         IOrderRepository orderRepository,
-        IOrderItemRepository orderItemRepository,
         ITableRepository tableRepository,
         IProductRepository productRepository,
         ICashRegisterRepository cashRegisterRepository,
@@ -28,10 +29,10 @@ public class OrderService : IOrderService
         IValidator<CreateOrderDto> createValidator,
         IValidator<AddOrderItemDto> addItemValidator,
         IValidator<UpdateOrderItemDto> updateItemValidator,
-        IValidator<CloseOrderDto> closeValidator)
+        IValidator<CloseOrderDto> closeValidator,
+        ILogger<OrderService> logger)
     {
         _orderRepository = orderRepository;
-        _orderItemRepository = orderItemRepository;
         _tableRepository = tableRepository;
         _productRepository = productRepository;
         _cashRegisterRepository = cashRegisterRepository;
@@ -40,6 +41,7 @@ public class OrderService : IOrderService
         _addItemValidator = addItemValidator;
         _updateItemValidator = updateItemValidator;
         _closeValidator = closeValidator;
+        _logger = logger;
     }
 
     public async Task<OrderDto> GetByIdAsync(int id)
@@ -127,9 +129,11 @@ public class OrderService : IOrderService
 
     public async Task<OrderDto> AddItemAsync(int orderId, AddOrderItemDto dto)
     {
+        var stopwatch = Stopwatch.StartNew();
         await _addItemValidator.ValidateAndThrowAsync(dto);
 
         var order = await _orderRepository.GetByIdAsync(orderId);
+        _logger.LogInformation("Order item add {OrderId}: order query completed at {ElapsedMs} ms", orderId, stopwatch.ElapsedMilliseconds);
         if (order == null)
             throw new KeyNotFoundException($"Order with ID {orderId} not found");
 
@@ -137,6 +141,7 @@ public class OrderService : IOrderService
             throw new InvalidOperationException("Cannot add items to a closed order");
 
         var product = await _productRepository.GetByIdAsync(dto.ProductId);
+        _logger.LogInformation("Order item add {OrderId}: product query completed at {ElapsedMs} ms", orderId, stopwatch.ElapsedMilliseconds);
         if (product == null)
             throw new KeyNotFoundException($"Product with ID {dto.ProductId} not found");
 
@@ -153,9 +158,8 @@ public class OrderService : IOrderService
             Observations = dto.Observations
         };
 
-        await _orderItemRepository.AddAsync(orderItem);
-
-        await UpdateOrderTotalAsync(order);
+        await _orderRepository.AddItemAndUpdateTotalAsync(order, orderItem);
+        _logger.LogInformation("Order item add {OrderId}: database update completed at {ElapsedMs} ms", orderId, stopwatch.ElapsedMilliseconds);
 
         return await MapToDtoAsync(order);
     }
@@ -180,9 +184,7 @@ public class OrderService : IOrderService
         orderItem.Subtotal = orderItem.UnitPrice * dto.Quantity;
         orderItem.UpdatedAt = DateTime.UtcNow;
 
-        await _orderItemRepository.UpdateAsync(orderItem);
-
-        await UpdateOrderTotalAsync(order);
+        await _orderRepository.UpdateItemAndTotalAsync(order, orderItem);
 
         return await MapToDtoAsync(order);
     }
@@ -200,9 +202,7 @@ public class OrderService : IOrderService
         if (orderItem == null)
             throw new KeyNotFoundException($"Order item with ID {itemId} not found");
 
-        await _orderItemRepository.DeleteAsync(orderItem);
-
-        await UpdateOrderTotalAsync(order);
+        await _orderRepository.RemoveItemAndTotalAsync(order, orderItem);
 
         return await MapToDtoAsync(order);
     }
@@ -244,17 +244,10 @@ public class OrderService : IOrderService
         return await MapToDtoAsync(order);
     }
 
-    private async Task UpdateOrderTotalAsync(Order order)
-    {
-        order.TotalAmount = order.OrderItems.Sum(oi => oi.Subtotal);
-        order.UpdatedAt = DateTime.UtcNow;
-        await _orderRepository.UpdateAsync(order);
-    }
-
     private async Task<OrderDto> MapToDtoAsync(Order order)
     {
-        var table = await _tableRepository.GetByIdAsync(order.TableId);
-        var user = order.UserId.HasValue ? await _userRepository.GetByIdAsync(order.UserId.Value) : null;
+        var table = order.Table ?? await _tableRepository.GetByIdAsync(order.TableId);
+        var user = order.User ?? (order.UserId.HasValue ? await _userRepository.GetByIdAsync(order.UserId.Value) : null);
         
         return new OrderDto
         {

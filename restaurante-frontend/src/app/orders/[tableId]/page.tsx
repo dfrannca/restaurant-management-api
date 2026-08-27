@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { Category, Order, PaymentMethod, Product } from '@/types';
@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUser } from '@/context/UserContext';
-import { CheckCircle2, Minus, Plus, Search, Trash2, X, Clock } from 'lucide-react';
+import { CheckCircle2, Minus, Plus, Search, Trash2, X, Clock, Printer } from 'lucide-react';
 
 const money = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 const paymentName = (v: PaymentMethod | null) => ({ 0: 'Dinheiro', 1: 'Pix', 2: 'Cartão de débito', 3: 'Cartão de crédito' }[v ?? 0]);
@@ -36,9 +36,11 @@ export default function OrderPage() {
   const [method, setMethod] = useState<PaymentMethod | null>(null);
   const [receivedText, setReceivedText] = useState('');
   const [saving, setSaving] = useState(false);
+  const [changingItems, setChangingItems] = useState(false);
   const [paid, setPaid] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
+    console.time('[tables/order] load');
     try {
       const [o, p, c, r] = await Promise.all([
         api.getActiveOrderByTable(Number(tableId)),
@@ -51,17 +53,24 @@ export default function OrderPage() {
       setCategories(c);
       setBlocked(!r);
       setNotes(Object.fromEntries(o.orderItems.map(i => [i.id, i.observations ?? ''])));
+      console.timeEnd('[tables/order] load');
+      console.info('[tables/order] API response', { tableId, orderId: o.id, items: o.orderItems.length });
     } catch {
+      console.timeEnd('[tables/order] load');
       router.push('/');
     } finally {
       setLoading(false);
     }
-  }
+  }, [router, tableId]);
 
   useEffect(() => {
-    const id = setTimeout(load, 0);
+    console.info('[tables/order] render', { tableId, itemCount: order?.orderItems.length ?? 0, total: order?.totalAmount ?? 0 });
+  }, [order, tableId]);
+
+  useEffect(() => {
+    const id = setTimeout(() => void load(), 0);
     return () => clearTimeout(id);
-  }, [tableId]);
+  }, [load]);
 
   const list = useMemo(
     () => products.filter(p => (!category || p.categoryId === category) && (!search || norm(p.name).includes(norm(search)))),
@@ -69,25 +78,63 @@ export default function OrderPage() {
   );
 
   async function add() {
-    if (!order || !selected) return;
-    await api.addOrderItem(order.id, { productId: selected.id, quantity: qty, observations: note || undefined });
-    setSelected(null);
-    setQty(1);
-    setNote('');
-    await load();
+    if (!order || !selected || changingItems) return;
+    setChangingItems(true);
+    console.time(`[order-item] add ${selected.id}`);
+    try {
+      const updatedOrder = await api.addOrderItem(order.id, { productId: selected.id, quantity: qty, observations: note || undefined });
+      setOrder(updatedOrder);
+      setNotes(Object.fromEntries(updatedOrder.orderItems.map(i => [i.id, i.observations ?? ''])));
+      console.timeEnd(`[order-item] add ${selected.id}`);
+      console.info('[order-item] updated', { orderId: updatedOrder.id, items: updatedOrder.orderItems.length, total: updatedOrder.totalAmount });
+      setSelected(null);
+      setQty(1);
+      setNote('');
+    } catch (error) {
+      console.error('[order-item] add failed', error);
+      alert((error as Error).message || 'Falha ao adicionar produto.');
+    } finally {
+      setChangingItems(false);
+    }
   }
 
   async function update(id: number, quantity: number, observation = notes[id] || '') {
     if (!order || quantity < 1) return;
-    await api.updateOrderItem(order.id, id, { quantity, observations: observation || undefined });
-    await load();
+    if (changingItems) return;
+    setChangingItems(true);
+    try {
+      const updatedOrder = await api.updateOrderItem(order.id, id, { quantity, observations: observation || undefined });
+      setOrder(updatedOrder);
+    } catch (error) {
+      alert((error as Error).message || 'Falha ao atualizar item.');
+    } finally {
+      setChangingItems(false);
+    }
   }
 
   async function remove(id: number) {
     if (order) {
-      await api.removeOrderItem(order.id, id);
-      await load();
+      if (changingItems) return;
+      setChangingItems(true);
+      try {
+        const updatedOrder = await api.removeOrderItem(order.id, id);
+        setOrder(updatedOrder);
+      } catch (error) {
+        alert((error as Error).message || 'Falha ao remover item.');
+      } finally {
+        setChangingItems(false);
+      }
     }
+  }
+
+  function printCommand() {
+    const currentOrder = order;
+    if (!currentOrder || !currentOrder.orderItems.length) {
+      alert('Não é possível gerar uma comanda vazia.');
+      return;
+    }
+    console.info('[command] print requested', { orderId: currentOrder.id, user: currentUser?.name ?? 'Não informado' });
+    window.print();
   }
 
   const received = Number(receivedText.replace(',', '.'));
@@ -137,6 +184,9 @@ export default function OrderPage() {
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
       </div>
     );
+
+  const serviceCharge = order.totalAmount * 0.1;
+  const commandTotal = order.totalAmount + serviceCharge;
 
   return (
     <div className="min-h-screen bg-graphite pb-24">
@@ -324,8 +374,8 @@ export default function OrderPage() {
                           <Button variant="outline" onClick={() => setSelected(null)} className="flex-1 py-6">
                             Cancelar
                           </Button>
-                          <Button onClick={add} className="flex-1 bg-emerald-600 py-6 font-bold text-white hover:bg-emerald-500">
-                            Adicionar
+                          <Button onClick={add} disabled={changingItems} className="flex-1 bg-emerald-600 py-6 font-bold text-white hover:bg-emerald-500">
+                            {changingItems ? 'Salvando...' : 'Adicionar'}
                           </Button>
                         </div>
                       </div>
@@ -340,17 +390,47 @@ export default function OrderPage() {
 
       {!blocked && (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/8 bg-graphite/95 p-3">
-          <div className="container mx-auto flex justify-between">
+          <div className="container mx-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <span className="label-uppercase">Total a pagar</span>
               <p className="font-heading text-xl font-bold text-amber-300">{money(order.totalAmount)}</p>
             </div>
-            <Button disabled={!order.orderItems.length} onClick={() => { setPaid(false); setPaymentOpen(true); }} className="bg-emerald-600 hover:bg-emerald-500">
-              Fechar pedido
-            </Button>
+            <div className="flex gap-2">
+              <Button disabled={!order.orderItems.length} onClick={printCommand} variant="outline" className="border-amber-400 text-amber-300 hover:bg-amber-400/10">
+                <Printer /> Gerar Comanda
+              </Button>
+              <Button disabled={!order.orderItems.length} onClick={() => { setPaid(false); setPaymentOpen(true); }} className="bg-emerald-600 hover:bg-emerald-500">
+                Finalizar Pedido
+              </Button>
+            </div>
           </div>
         </div>
       )}
+
+      <section className="print-command" aria-hidden="true">
+        <h1>BAR &amp; CHURRASCARIA</h1>
+        <h2>PROGRESSO</h2>
+        <hr />
+        <p>MESA: {String(order.tableNumber).padStart(2, '0')}</p>
+        <p>COMANDA: #{String(order.id).padStart(6, '0')}</p>
+        <p>ABERTA: {new Date(order.openedAt).toLocaleString('pt-BR')}</p>
+        <h3>ITENS</h3>
+        <hr />
+        {order.orderItems.map(item => (
+          <div className="print-command-item" key={item.id}>
+            <span>{String(item.quantity).padStart(2, '0')}x {item.productName}</span>
+            <strong>{money(item.subtotal)}</strong>
+          </div>
+        ))}
+        <hr />
+        <div className="print-command-item"><span>Subtotal</span><strong>{money(order.totalAmount)}</strong></div>
+        <div className="print-command-item"><span>Taxa de serviço</span><strong>{money(serviceCharge)}</strong></div>
+        <hr />
+        <div className="print-command-item print-command-total"><span>TOTAL</span><strong>{money(commandTotal)}</strong></div>
+        <p>GARÇOM: {currentUser?.name || order.userName || 'Não informado'}</p>
+        <hr />
+        <h2>COMANDA ABERTA</h2>
+      </section>
 
       <Dialog 
         open={paymentOpen} 

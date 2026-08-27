@@ -108,4 +108,87 @@
   .glass-panel {
     @apply border border-white/8 bg-surface/80 shadow-2xl shadow-black/20 backdrop-blur-sm;
   }
+
+  .print-command {
+    display: none;
+  }
+}
+
+@media print {
+  @page {
+    size: auto;
+    margin: 4mm;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .print-command {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-width: 72mm;
+    visibility: visible !important;
+    color: black;
+    font-family: "Courier New", monospace;
+    font-size: 11px;
+    line-height: 1.35;
+    page-break-inside: avoid;
+  }
+
+  .print-command * {
+    visibility: visible !important;
+  }
+
+  .print-command h1,
+  .print-command h2,
+  .print-command h3 {
+    margin: 0;
+    text-align: center;
+    font-size: 13px;
+  }
+
+  .print-command h3 {
+    margin-top: 10px;
+    text-align: left;
+  }
+
+  .print-command hr {
+    border: 0;
+    border-top: 1px dashed black;
+    margin: 5px 0;
+  }
+
+  .print-command p {
+    margin: 3px 0;
+  }
+
+  .print-command-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    break-inside: avoid;
+  }
+
+  .print-command-item span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .print-command-item strong {
+    white-space: nowrap;
+  }
+
+  .print-command-total {
+    font-size: 14px;
+    font-weight: 700;
+  }
 }
