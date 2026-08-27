@@ -173,27 +173,23 @@ export default function OrderPage() {
     }
   }
 
-  // Format time without negative values - handle UTC conversion
-  const formatTime = (dateString: string) => {
-    if (!dateString) return '';
-    
-    const date = new Date(dateString);
+  const getOrderStatus = (openedAt: string | undefined, isClosed: boolean) => {
+    if (isClosed) return 'Pedido encerrado';
+    if (!openedAt) return 'Aberta recentemente';
+
+    const date = new Date(openedAt);
+    if (Number.isNaN(date.getTime())) return 'Aberta recentemente';
+
     const now = new Date();
-    
-    // Handle UTC to local conversion
-    const localDate = new Date(date.getTime() + date.getTimezoneOffset() * 60000);
-    const diff = now.getTime() - localDate.getTime();
-    
-    // If date is in the future, show as just opened
-    if (diff < 0)return 'Recém aberta';
-    
+    const diff = Math.max(0, now.getTime() - date.getTime());
     const minutes = Math.floor(diff / 60000);
     const hours = Math.floor(minutes / 60);
 
-    if (hours > 0) {
-      return `${hours}h ${minutes % 60}min`;
-    }
-    return `${minutes}min`;
+    if (hours === 1) return 'Aberta há 1 hora';
+    if (hours > 1) return `Aberta há ${hours} horas`;
+    if (minutes === 1) return 'Aberta há 1 minuto';
+    if (minutes > 1) return `Aberta há ${minutes} minutos`;
+    return 'Aberta recentemente';
   };
 
   if (loading || !order)
@@ -216,13 +212,10 @@ export default function OrderPage() {
             </Button>
             <p className="label-uppercase text-amber-400">Pedido em andamento</p>
             <h1 className="font-heading text-3xl font-extrabold text-white">Mesa {order.tableNumber}</h1>
-            <p className="text-sm text-slate-400">{order.customerName || 'Cliente não informado'}</p>
-            {order.openedAt && (
-              <div className="mt-2 flex items-center gap-2 text-sm text-slate-400">
-                <Clock className="h-4 w-4" />
-                <span>Aberta há {formatTime(order.openedAt)}</span>
-              </div>
-            )}
+            <div className="mt-3 flex items-center gap-2 text-sm text-slate-400">
+              <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>{getOrderStatus(order.openedAt, order.isClosed)}</span>
+            </div>
           </div>
           <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-right">
             <span className="label-uppercase text-amber-300">Total do pedido</span>
