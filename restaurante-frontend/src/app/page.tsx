@@ -29,6 +29,7 @@ export default function Dashboard() {
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [openingBalance, setOpeningBalance] = useState('');
   const [registerBannerBlocked, setRegisterBannerBlocked] = useState(false);
+  const [openingTableId, setOpeningTableId] = useState<number | null>(null);
 
   async function checkRegisterAndLoad() {
     try {
@@ -84,16 +85,20 @@ export default function Dashboard() {
   }, [loadingUsers, token]);
 
   const handleOpenTable = async (tableId: number) => {
+    setOpeningTableId(tableId);
+    setIsDialogOpen(false);
+
     try {
       await api.openTable(tableId, { customerName, observations });
       setCustomerName('');
       setObservations('');
       setSelectedTable(null);
-      setIsDialogOpen(false);
-      loadTables();
+      void loadTables();
     } catch (error) {
       console.error('Failed to open table:', error);
       alert((error as Error).message || 'Falha ao abrir mesa');
+    } finally {
+      setOpeningTableId(null);
     }
   };
 
@@ -269,11 +274,11 @@ export default function Dashboard() {
           {tables.map((table) => (
             <Card
               key={table.id}
-              className={`${getStatusBorderColor(table.status)} flex h-[440px] flex-col overflow-hidden rounded-2xl border-y border-r border-white/7 bg-surface/90 shadow-xl shadow-black/15 ring-0 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl`}
+              className={`${getStatusBorderColor(table.status)} flex h-[320px] flex-col overflow-hidden rounded-2xl border-y border-r border-white/7 bg-surface/90 shadow-xl shadow-black/15 ring-0 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl`}
             >
-              <CardHeader className="border-b border-surface-light/40 bg-surface-light/30 pb-4">
+              <CardHeader className="border-b border-surface-light/40 bg-surface-light/30 px-4 py-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="font-heading text-3xl font-extrabold tracking-tight text-white">
+                  <CardTitle className="font-heading text-2xl font-extrabold tracking-tight text-white">
                     Mesa {table.number}
                   </CardTitle>
                   <Badge
@@ -283,26 +288,26 @@ export default function Dashboard() {
                   </Badge>
                 </div>
               </CardHeader>
-              <CardContent className="flex min-h-0 flex-1 flex-col pt-5">
-                <div className="flex min-h-0 flex-1 flex-col space-y-4">
+              <CardContent className="flex min-h-0 flex-1 flex-col px-4 pt-3 pb-3">
+                <div className="flex min-h-0 flex-1 flex-col space-y-2">
                   {table.status !== TableStatus.Free && (
                     <>
                       {table.customerName && (
-                        <div className="rounded-xl border border-surface-light/50 bg-surface-light/40 px-3 py-2.5">
+                        <div className="rounded-xl border border-surface-light/50 bg-surface-light/40 px-3 py-2">
                           <span className="label-uppercase text-amber-400">Cliente</span>
                           <p className="mt-1 text-sm font-medium text-slate-100">{table.customerName}</p>
                         </div>
                       )}
                       {table.currentTotal !== undefined && table.currentTotal > 0 && (
-                        <div className="rounded-xl border border-accent/30 bg-accent/10 px-3 py-3 text-center">
+                        <div className="rounded-xl border border-accent/30 bg-accent/10 px-3 py-2 text-center">
                           <span className="label-uppercase text-accent">Total</span>
-                          <p className="mt-1 text-2xl font-extrabold text-accent">
+                          <p className="mt-1 text-xl font-extrabold text-accent">
                             {formatCurrency(table.currentTotal)}
                           </p>
                         </div>
                       )}
                       {table.openedAt && (
-                        <div className="rounded-xl border border-surface-light/50 bg-surface-light/40 px-3 py-2.5">
+                        <div className="rounded-xl border border-surface-light/50 bg-surface-light/40 px-3 py-2">
                           <span className="label-uppercase text-slate-400">Aberta há</span>
                           <p className="mt-1 font-mono text-sm font-semibold text-slate-200">
                             {formatTime(table.openedAt)}
@@ -356,10 +361,13 @@ export default function Dashboard() {
                             />
                           </div>
                           <Button
+                            type="button"
+                            disabled={openingTableId === table.id}
+                            aria-busy={openingTableId === table.id}
                             onClick={() => handleOpenTable(table.id)}
                             className="w-full rounded-xl bg-emerald-600 py-3 font-bold uppercase tracking-widest text-white hover:bg-emerald-700 cursor-pointer"
                           >
-                            Confirmar Abertura
+                                    {openingTableId === table.id ? 'Abrindo mesa...' : 'Confirmar Abertura'}
                           </Button>
                         </div>
                       </DialogContent>
@@ -368,7 +376,7 @@ export default function Dashboard() {
 
                   <Button
                     disabled={isBlocked && table.status === TableStatus.Free}
-                    className={`w-full rounded-xl py-3 font-bold uppercase tracking-widest text-white shadow-lg transition-all duration-300 cursor-pointer ${
+                    className={`mt-auto w-full rounded-xl py-3 font-bold uppercase tracking-widest text-white shadow-lg transition-all duration-300 cursor-pointer ${
                       isBlocked && table.status === TableStatus.Free
                         ? 'bg-slate-700/50 text-slate-500 border border-slate-700/50 cursor-not-allowed shadow-none'
                         : table.status === TableStatus.Free
