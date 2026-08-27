@@ -25,7 +25,6 @@ export default function Dashboard() {
 
   // Cash Register states
   const [cashRegister, setCashRegister] = useState<CashRegister | null>(null);
-  const [isCheckingRegister, setIsCheckingRegister] = useState(true);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [openingBalance, setOpeningBalance] = useState('');
   const [registerBannerBlocked, setRegisterBannerBlocked] = useState(false);
@@ -33,7 +32,6 @@ export default function Dashboard() {
 
   const checkRegisterAndLoad = useCallback(async () => {
     try {
-      setIsCheckingRegister(true);
       const register = await api.getOpenCashRegister();
       if (register) {
         setCashRegister(register);
@@ -52,8 +50,6 @@ export default function Dashboard() {
       if (!registerBannerBlocked) {
         setShowRegisterModal(true);
       }
-    } finally {
-      setIsCheckingRegister(false);
     }
   }, [registerBannerBlocked]);
 
@@ -217,17 +213,6 @@ export default function Dashboard() {
     return `${minutes}m`;
   };
 
-  if (loading || isCheckingRegister) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-graphite">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-          <p className="text-slate-400 label-uppercase">Carregando mesas...</p>
-        </div>
-      </div>
-    );
-  }
-
   const isBlocked = !cashRegister;
   const freeTables = tables.filter((table) => table.status === TableStatus.Free).length;
   const occupiedTables = tables.filter((table) => table.status === TableStatus.Occupied).length;
@@ -291,7 +276,13 @@ export default function Dashboard() {
           </div>
         </section>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
-          {tables.map((table) => (
+          {tables.length === 0 && loading ? (
+            Array.from({ length: 4 }, (_, index) => (
+              <div key={index} className="h-[320px] animate-pulse rounded-2xl border border-white/8 bg-surface/70" aria-label="Carregando mesa" />
+            ))
+          ) : tables.length === 0 ? (
+            <p className="col-span-full py-12 text-center text-slate-400">Nenhuma mesa cadastrada.</p>
+          ) : tables.map((table) => (
             <Card
               key={table.id}
               className={`${getStatusBorderColor(table.status)} flex min-h-[320px] flex-col overflow-visible rounded-2xl border-y border-r border-white/7 bg-surface/90 shadow-xl shadow-black/15 ring-0 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl`}
