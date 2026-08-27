@@ -20,15 +20,22 @@ import {
 
 export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [closings, setClosings] = useState<CashClosing[]>([]);
   const [selectedClosing, setSelectedClosing] = useState<CashClosing | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
 
   async function loadHistory() {
+    console.info('[history] load started', { at: new Date().toISOString() });
     try {
       const data = await api.getCashClosings();
       setClosings(data);
+      setLoadError(null);
+      console.info('[history] state updated', { at: new Date().toISOString(), count: data.length });
     } catch (error) {
+      setLoadError(error instanceof DOMException && error.name === 'AbortError'
+        ? 'A API demorou muito para responder.'
+        : 'Não foi possível carregar o histórico.');
       console.error('Failed to load cash closings history:', error);
     } finally {
       setLoading(false);
@@ -85,7 +92,19 @@ export default function HistoryPage() {
     }
   };
 
-  if (loading) {
+  if (loading && closings.length === 0) {
+    if (loadError) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-graphite p-6">
+          <div className="flex max-w-md flex-col items-center gap-4 text-center">
+            <p className="text-slate-300">{loadError}</p>
+            <Button onClick={() => { setLoadError(null); setLoading(true); void loadHistory(); }} className="bg-accent-orange text-white hover:bg-orange-600">
+              Tentar novamente
+            </Button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="flex items-center justify-center min-h-screen bg-graphite">
         <div className="flex flex-col items-center gap-3">

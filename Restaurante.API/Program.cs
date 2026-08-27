@@ -94,6 +94,26 @@ builder.Services.AddApplication();
 
 var app = builder.Build();
 
+app.Use(async (context, next) =>
+{
+    var requestId = context.Request.Headers.TryGetValue("X-Request-ID", out var incomingId) && !string.IsNullOrWhiteSpace(incomingId)
+        ? incomingId.ToString()
+        : Guid.NewGuid().ToString("N");
+    var logger = context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("RequestTiming");
+    var startedAt = Stopwatch.GetTimestamp();
+    context.Response.Headers["X-Request-ID"] = requestId;
+    logger.LogInformation("Request {RequestId} started {Method} {Path} at {StartedAt}", requestId, context.Request.Method, context.Request.Path, DateTime.UtcNow);
+    try
+    {
+        await next();
+    }
+    finally
+    {
+        var elapsedMs = Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds;
+        logger.LogInformation("Request {RequestId} completed {StatusCode} in {ElapsedMs} ms at {CompletedAt}", requestId, context.Response.StatusCode, elapsedMs, DateTime.UtcNow);
+    }
+});
+
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();

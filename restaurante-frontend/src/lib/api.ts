@@ -2,6 +2,7 @@ import { User, Category, Product, Table, Order, CashRegister, CashClosing } from
 
 const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/+$/, '');
 const API_BASE_URL = configuredApiUrl || (process.env.NODE_ENV === 'development' ? 'http://localhost:5230/api' : null);
+const API_TIMEOUT_MS = 15000;
 
 async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
   if (!API_BASE_URL) {
@@ -9,26 +10,46 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
   }
 
   const url = `${API_BASE_URL}${endpoint}`;
+  const requestId = crypto.randomUUID();
+  const startedAt = performance.now();
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  const signal = options?.signal ?? controller.signal;
+  console.info('[api] request started', { requestId, endpoint, at: new Date().toISOString() });
   
   const token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
   const headers = new Headers(options?.headers);
   headers.set('Content-Type', 'application/json');
+  headers.set('X-Request-ID', requestId);
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
   const response = await fetch(url, {
     ...options,
+    signal,
     cache: options?.method === 'GET' || !options?.method ? 'no-store' : options.cache,
     headers,
+  });
+  window.clearTimeout(timeout);
+  console.info('[api] response received', {
+    requestId,
+    endpoint,
+    status: response.status,
+    durationMs: Math.round(performance.now() - startedAt),
+    at: new Date().toISOString(),
   });
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'An error occurred' }));
-    throw new Error(error.message || 'Request failed');
+    const apiError = new Error(error.message || 'Request failed') as Error & { status?: number };
+    apiError.status = response.status;
+    throw apiError;
   }
 
-  return response.json();
+  const data = await response.json();
+  console.info('[api] state payload ready', { requestId, endpoint, at: new Date().toISOString() });
+  return data;
 }
 
 export const api = {

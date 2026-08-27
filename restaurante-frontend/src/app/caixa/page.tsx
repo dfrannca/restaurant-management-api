@@ -30,6 +30,7 @@ export default function CashRegisterPage() {
   const { currentUser } = useUser();
   
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeRegister, setActiveRegister] = useState<CashRegister | null>(null);
   const [summary, setSummary] = useState<CashClosing | null>(null);
   
@@ -39,6 +40,7 @@ export default function CashRegisterPage() {
   const [isClosing, setIsClosing] = useState(false);
 
   async function loadRegisterData() {
+    console.info('[cash] load started', { at: new Date().toISOString() });
     try {
       const registerData = await api.getOpenCashRegister();
       if (registerData) {
@@ -50,20 +52,28 @@ export default function CashRegisterPage() {
         setActiveRegister(null);
         setSummary(null);
       }
-    } catch {
-      setActiveRegister(null);
-      setSummary(null);
+      setLoadError(null);
+      console.info('[cash] state updated', { at: new Date().toISOString() });
+    } catch (error) {
+      if ((error as Error & { status?: number }).status === 404) {
+        setActiveRegister(null);
+        setSummary(null);
+        setLoadError(null);
+        return;
+      }
+      setLoadError(error instanceof DOMException && error.name === 'AbortError'
+        ? 'A API demorou muito para responder.'
+        : 'Não foi possível carregar os dados do caixa.');
+      console.error('[cash] load failed', error);
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    const initialLoad = window.setTimeout(loadRegisterData, 0);
-    const interval = setInterval(loadRegisterData, 10000);
+    const initialLoad = window.setTimeout(() => void loadRegisterData(), 0);
     return () => {
       clearTimeout(initialLoad);
-      clearInterval(interval);
     };
   }, []);
 
@@ -129,7 +139,19 @@ export default function CashRegisterPage() {
     }
   };
 
-  if (loading) {
+  if (loading && !activeRegister && !summary) {
+    if (loadError) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-graphite p-6">
+          <div className="flex max-w-md flex-col items-center gap-4 text-center">
+            <p className="text-slate-300">{loadError}</p>
+            <Button onClick={() => { setLoadError(null); setLoading(true); void loadRegisterData(); }} className="bg-accent-orange text-white hover:bg-orange-600">
+              Tentar novamente
+            </Button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="flex items-center justify-center min-h-screen bg-graphite">
         <div className="flex flex-col items-center gap-3">

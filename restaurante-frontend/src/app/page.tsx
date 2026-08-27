@@ -18,6 +18,7 @@ export default function Dashboard() {
   const { currentUser, token, loadingUsers } = useUser();
   const [tables, setTables] = useState<Table[]>([]);
   const [tablesLoaded, setTablesLoaded] = useState(false);
+  const [tablesError, setTablesError] = useState<string | null>(null);
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
   const [customerName, setCustomerName] = useState('');
   const [observations, setObservations] = useState('');
@@ -58,11 +59,15 @@ export default function Dashboard() {
     console.info('[tables] load started', { at: new Date().toISOString() });
     try {
       const data = await api.getTables();
+      setTablesError(null);
       console.info('[tables] API response', { at: new Date().toISOString(), count: data.length });
       const sortedTables = [...data].sort((firstTable, secondTable) => firstTable.number - secondTable.number);
       setTables(sortedTables);
       console.info('[tables] state updated', { at: new Date().toISOString(), count: sortedTables.length });
     } catch (error) {
+      setTablesError(error instanceof DOMException && error.name === 'AbortError'
+        ? 'A API demorou muito para responder.'
+        : 'Não foi possível carregar as mesas.');
       console.error('Failed to load tables:', error);
     } finally {
       console.timeEnd('[tables] load');
@@ -213,12 +218,25 @@ export default function Dashboard() {
     return `${minutes}m`;
   };
 
-  if (!tablesLoaded) {
+  if (!tablesLoaded && !tablesError) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-graphite">
         <div className="flex flex-col items-center gap-3">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
           <p className="text-slate-400 label-uppercase">Carregando mesas...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (tablesError && tables.length === 0) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-graphite p-6">
+        <div className="flex max-w-md flex-col items-center gap-4 text-center">
+          <p className="text-slate-300">{tablesError}</p>
+          <Button onClick={() => { setTablesError(null); setTablesLoaded(false); void loadTables(); }} className="bg-accent-orange text-white hover:bg-orange-600">
+            Tentar novamente
+          </Button>
         </div>
       </div>
     );
@@ -268,6 +286,14 @@ export default function Dashboard() {
 
       {/* Main Content */}
       <main className="container mx-auto px-6 py-6 flex-1">
+        {tablesError && (
+          <div className="mb-4 flex items-center justify-between rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-200">
+            <span>{tablesError} Os dados exibidos são os últimos disponíveis.</span>
+            <Button variant="outline" onClick={() => void loadTables()} className="ml-4 border-red-300/40 text-red-100 hover:bg-red-300/10">
+              Tentar novamente
+            </Button>
+          </div>
+        )}
         <section className="mb-7 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <div className="glass-panel rounded-2xl p-4">
             <div className="flex items-center justify-between"><span className="label-uppercase">Mesas livres</span><Armchair className="h-4 w-4 text-emerald-400" /></div>
