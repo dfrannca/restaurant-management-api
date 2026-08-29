@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
-import { Category, Order, PaymentMethod, Product, OrderStatus } from '@/types';
+import { Category, Order, OrderItem, PaymentMethod, Product, OrderStatus } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -107,6 +107,22 @@ export default function OrderPage() {
     setChangingItems(true);
     syncAction('saving');
     console.time(`[order-item] add ${product.id}`);
+
+    // Optimistic update: adiciona o item imediatamente na lista antes do roundtrip.
+    // O id temporário (negativo) é substituído pelos dados reais quando a API responder.
+    const optimisticId = -Date.now();
+    const optimisticItem: OrderItem = {
+      id: optimisticId,
+      productId: product.id,
+      productName: product.name,
+      quantity,
+      unitPrice: product.price,
+      subtotal: product.price * quantity,
+    };
+
+    setOrder(prev => prev ? { ...prev, orderItems: [...prev.orderItems, optimisticItem] } : prev);
+    setNotes(prev => ({ ...prev, [optimisticId]: '' }));
+
     try {
       const updatedOrder = await api.addOrderItem(order.id, { productId: product.id, quantity });
       setOrder(updatedOrder);
@@ -115,6 +131,13 @@ export default function OrderPage() {
       console.timeEnd(`[order-item] add ${product.id}`);
       console.info('[order-item] updated', { orderId: updatedOrder.id, items: updatedOrder.orderItems.length, total: updatedOrder.totalAmount });
     } catch (error) {
+      // Rollback: remove o item otimista já que a API falhou
+      setOrder(prev => prev ? { ...prev, orderItems: prev.orderItems.filter(i => i.id !== optimisticId) } : prev);
+      setNotes(prev => {
+        const next = { ...prev };
+        delete next[optimisticId];
+        return next;
+      });
       console.error('[order-item] add failed', error);
       syncAction('error', (error as Error).message || 'Erro ao sincronizar — Tentar novamente');
       alert((error as Error).message || 'Falha ao adicionar produto.');
