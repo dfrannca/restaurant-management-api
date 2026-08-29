@@ -33,13 +33,29 @@ export default function Dashboard() {
   const [tableSearch, setTableSearch] = useState('');
 
   const checkRegisterAndLoad = useCallback(async () => {
+    // Hidrata o último estado conhecido do caixa para render imediato
+    // (produção: rede lenta/cold start). A busca abaixo confirma em seguida.
+    try {
+      const cachedRaw = sessionStorage.getItem('cash_register_cache');
+      if (cachedRaw) {
+        const cachedRegister = JSON.parse(cachedRaw) as CashRegister;
+        setCashRegister(cachedRegister);
+        setShowRegisterModal(false);
+        setRegisterBannerBlocked(false);
+      }
+    } catch {
+      // cache inválido — ignora
+    }
+
     try {
       const register = await api.getOpenCashRegister();
       if (register) {
+        sessionStorage.setItem('cash_register_cache', JSON.stringify(register));
         setCashRegister(register);
         setShowRegisterModal(false);
         setRegisterBannerBlocked(false);
       } else {
+        sessionStorage.removeItem('cash_register_cache');
         setCashRegister(null);
         // Only show modal if not explicitly blocked by user
         if (!registerBannerBlocked) {
@@ -47,9 +63,10 @@ export default function Dashboard() {
         }
       }
     } catch {
-      setCashRegister(null);
-      // Only show modal if not explicitly blocked by user
-      if (!registerBannerBlocked) {
+      // Em falha (ex.: cold start), mantém o último estado conhecido
+      // em vez de bloquear o painel com o modal de abertura.
+      if (!sessionStorage.getItem('cash_register_cache') && !registerBannerBlocked) {
+        setCashRegister(null);
         setShowRegisterModal(true);
       }
     }
@@ -58,12 +75,29 @@ export default function Dashboard() {
   const loadTables = useCallback(async () => {
     console.time('[tables] load');
     console.info('[tables] load started', { at: new Date().toISOString() });
+
+    // Hidrata o último resultado conhecido para render imediato enquanto a API
+    // responde (produção: rede lenta/cold start). A busca abaixo atualiza em seguida.
+    try {
+      const cachedRaw = sessionStorage.getItem('tables_cache');
+      if (cachedRaw) {
+        const cached = JSON.parse(cachedRaw) as { data?: Table[] };
+        const cachedData = cached.data;
+        if (Array.isArray(cachedData) && cachedData.length > 0) {
+          setTables(prev => (prev.length > 0 ? prev : [...cachedData].sort((a, b) => a.number - b.number)));
+        }
+      }
+    } catch {
+      // cache inválido — ignora
+    }
+
     try {
       const data = await api.getTables();
       setTablesError(null);
       console.info('[tables] API response', { at: new Date().toISOString(), count: data.length });
       const sortedTables = [...data].sort((firstTable, secondTable) => firstTable.number - secondTable.number);
       setTables(sortedTables);
+      sessionStorage.setItem('tables_cache', JSON.stringify({ at: Date.now(), data: sortedTables }));
       console.info('[tables] state updated', { at: new Date().toISOString(), count: sortedTables.length });
     } catch (error) {
       setTablesError(error instanceof DOMException && error.name === 'AbortError'
@@ -247,7 +281,16 @@ export default function Dashboard() {
   const freeTables = tables.filter((table) => table.status === TableStatus.Free).length;
   const occupiedTables = tables.filter((table) => table.status === TableStatus.Occupied).length;
   const openTotal = tables.reduce((total, table) => total + (table.currentTotal ?? 0), 0);
-  const visibleTables = tables.filter((table) => String(table.number).includes(tableSearch.trim()));
+  const searchTerm = tableSearch.trim().toLowerCase();
+  // Aceita "mesa 1", "mesa1", "MESA 1" → busca exata pelo número
+  const mesaNumberMatch = searchTerm.match(/^mesa\s*(\d+)$/);
+  const visibleTables = tables.filter((table) => {
+    if (searchTerm === '') return true;
+    if (mesaNumberMatch) {
+      return table.number === Number(mesaNumberMatch[1]);
+    }
+    return String(table.number).includes(searchTerm);
+  });
 
   return (
     <div className="min-h-0 flex-1 bg-graphite flex flex-col">
@@ -264,7 +307,7 @@ export default function Dashboard() {
               <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-500" />
               <Input 
                 value={tableSearch} 
-                onChange={(event) => setTableSearch(event.currentTarget.value)} 
+                onChange={(event) => setTableSearch(event.target.value)} 
                 placeholder="Pesquisar mesa..." 
                 className="h-11 border-surface-light bg-surface/70 pl-9 text-white placeholder:text-slate-500" 
               />

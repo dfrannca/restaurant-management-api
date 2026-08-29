@@ -10,7 +10,7 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, string connectionString)
     {
-        services.AddDbContext<AppDbContext>(options =>
+        services.AddDbContextPool<AppDbContext>(options =>
         {
             if (connectionString.StartsWith("Data Source", StringComparison.OrdinalIgnoreCase))
                 options.UseSqlite(connectionString);

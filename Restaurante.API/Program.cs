@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration.Json;
@@ -32,6 +33,16 @@ if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_URL
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
+
+// Compressão de resposta: reduz drasticamente o payload JSON em redes lentas
+// (produção: Render + clientes móveis). Brotli tem prioridade sobre Gzip.
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+    options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(["application/json"]);
+});
 
 // Configure Authentication
 var jwtSecret = Environment.GetEnvironmentVariable("Jwt__Secret") ?? builder.Configuration["Jwt:Secret"];
@@ -74,6 +85,9 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins(allowedOrigins);
         policy.AllowAnyMethod().AllowAnyHeader();
+        // Cacheia o preflight (OPTIONS) no navegador: evita 1 roundtrip extra
+        // por requisição em cada navegação (relevante em redes de alta latência).
+        policy.SetPreflightMaxAge(TimeSpan.FromMinutes(10));
     });
 });
 
@@ -311,6 +325,7 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+app.UseResponseCompression();
 app.UseCors("AllowAll");
 if (!app.Environment.IsDevelopment())
 {
@@ -319,6 +334,10 @@ if (!app.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+// Health check leve (sem autenticação) para pings de keep-alive/uptime
+// (ex.: UptimeRobot/cron a cada 5-10 min evita o cold start do Render free tier)
+app.MapGet("/health", () => Results.Ok(new { status = "healthy", at = DateTime.UtcNow }));
 
 app.Run();
 
@@ -360,6 +379,12 @@ static string BuildProductionConnectionString(string? databaseUrl)
         Database = Uri.UnescapeDataString(databaseUri.AbsolutePath.Trim('/')),
         SslMode = Npgsql.SslMode.Require
     };
+
+    // Auto-prepare de statements + keepalive: reduz a latência de queries repetidas
+    // e evita reconexões TLS caras após ociosidade (links de alta latência, ex.: Render).
+    connectionBuilder.MaxAutoPrepare = 15;
+    connectionBuilder.AutoPrepareMinUsages = 2;
+    connectionBuilder.KeepAlive = 30;
 
     return connectionBuilder.ConnectionString;
 }
