@@ -32,7 +32,7 @@ export default function CashRegisterPage() {
   
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [activeRegister, setActiveRegister] = useState<CashRegister | null>(null);
+  const [activeRegister, setActiveRegister] = useState<CashRegister | null | undefined>(undefined);
   const [summary, setSummary] = useState<CashClosing | null>(null);
   
   // Closing Cash Register states
@@ -150,7 +150,9 @@ export default function CashRegisterPage() {
     }
   };
 
-  if (loading && !activeRegister && !summary) {
+  // Consulta do caixa ainda em andamento: activeRegister === undefined
+  // (única fase em que loading/skeleton pode aparecer; nunca "Caixa Fechado")
+  if (activeRegister === undefined) {
     if (loadError) {
       return (
         <div className="flex min-h-screen items-center justify-center bg-graphite p-6">
@@ -175,8 +177,8 @@ export default function CashRegisterPage() {
 
   const isAdmin = currentUser?.role === UserRole.Administrator;
 
-  // Render Closed/No active register state
-  if (!activeRegister || !summary) {
+  // Consulta concluída e não existe caixa aberto: apenas activeRegister === null
+  if (activeRegister === null) {
     return (
       <div className="min-h-screen bg-graphite flex flex-col justify-center items-center p-6">
         <Card className="max-w-md w-full rounded-2xl border-0 bg-surface shadow-xl p-8 text-center ring-0">
@@ -196,6 +198,19 @@ export default function CashRegisterPage() {
             Ir para Painel de Mesas
           </Button>
         </Card>
+      </div>
+    );
+  }
+
+  // Caixa aberto confirmado: aguarda o resumo (summary) terminar antes de montar a tela.
+  // Aqui NÃO pode aparecer "Caixa Fechado" — o caixa existe, só o resumo ainda está carregando.
+  if (!summary) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-graphite">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+          <p className="text-slate-400 label-uppercase">Carregando dados do caixa...</p>
+        </div>
       </div>
     );
   }

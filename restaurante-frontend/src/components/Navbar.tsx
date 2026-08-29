@@ -11,7 +11,7 @@ import { ChefHat, LogOut, UserCircle } from 'lucide-react';
 export function Navbar() {
   const pathname = usePathname();
   const { currentUser, logout } = useUser();
-  const [cashRegister, setCashRegister] = useState<CashRegister | null>(null);
+  const [cashRegister, setCashRegister] = useState<CashRegister | null | undefined>(undefined);
 
   useEffect(() => {
     if (pathname === '/login') {
@@ -99,7 +99,12 @@ export function Navbar() {
         <div className="flex items-center justify-between sm:justify-end gap-4 border-t border-surface-light/35 pt-4 sm:border-t-0 sm:pt-0">
           {/* Cash Register Status Badge */}
           <div>
-            {cashRegister ? (
+            {cashRegister === undefined ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-500/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-slate-400 border border-slate-500/20">
+                <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-pulse" />
+                Verificando...
+              </span>
+            ) : cashRegister ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-emerald-400 border border-emerald-500/20">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 Caixa Aberto
