@@ -16,6 +16,11 @@ export enum UserRole {
   Administrator = 1
 }
 
+export enum OrderStatus {
+  InProgress = 0,
+  OnTable = 1
+}
+
 export interface User {
   id: number;
   username: string;
@@ -75,6 +80,7 @@ export interface Order {
   totalAmount: number;
   paymentMethod?: PaymentMethod;
   isClosed: boolean;
+  status: OrderStatus;
   userName?: string;
   orderItems: OrderItem[];
 }

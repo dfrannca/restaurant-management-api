@@ -246,6 +246,23 @@ public class OrderService : IOrderService
         return await MapToDtoAsync(order);
     }
 
+    public async Task<OrderDto> UpdateStatusAsync(int id, UpdateOrderStatusDto dto)
+    {
+        var order = await _orderRepository.GetByIdAsync(id);
+        if (order == null)
+            throw new KeyNotFoundException($"Order with ID {id} not found");
+
+        if (order.IsClosed)
+            throw new InvalidOperationException("Cannot update status of a closed order");
+
+        order.Status = dto.Status;
+        order.UpdatedAt = DateTime.UtcNow;
+
+        await _orderRepository.UpdateAsync(order);
+
+        return await MapToDtoAsync(order);
+    }
+
     private async Task<OrderDto> MapToDtoAsync(Order order)
     {
         var table = order.Table ?? await _tableRepository.GetByIdAsync(order.TableId);
@@ -263,6 +280,7 @@ public class OrderService : IOrderService
             TotalAmount = order.OrderItems.Sum(orderItem => orderItem.Subtotal),
             PaymentMethod = order.PaymentMethod,
             IsClosed = order.IsClosed,
+            Status = order.Status,
             CashRegisterId = order.CashRegisterId,
             UserId = order.UserId,
             UserName = user?.Name,

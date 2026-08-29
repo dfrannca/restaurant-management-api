@@ -13,4 +13,5 @@ public interface IOrderService
     Task<OrderDto> UpdateItemAsync(int orderId, int itemId, UpdateOrderItemDto dto);
     Task<OrderDto> RemoveItemAsync(int orderId, int itemId);
     Task<OrderDto> CloseOrderAsync(int id, CloseOrderDto dto);
+    Task<OrderDto> UpdateStatusAsync(int id, UpdateOrderStatusDto dto);
 }

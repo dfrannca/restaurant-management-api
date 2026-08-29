@@ -13,6 +13,7 @@ public class Order : BaseEntity
     public decimal TotalAmount { get; set; }
     public PaymentMethod? PaymentMethod { get; set; }
     public bool IsClosed { get; set; }
+    public OrderStatus Status { get; set; } = OrderStatus.InProgress;
     public int? CashRegisterId { get; set; }
     public CashRegister? CashRegister { get; set; }
     public int? UserId { get; set; }

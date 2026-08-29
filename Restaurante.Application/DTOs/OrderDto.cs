@@ -14,6 +14,7 @@ public class OrderDto
     public decimal TotalAmount { get; set; }
     public PaymentMethod? PaymentMethod { get; set; }
     public bool IsClosed { get; set; }
+    public OrderStatus Status { get; set; }
     public int? CashRegisterId { get; set; }
     public int? UserId { get; set; }
     public string? UserName { get; set; }
@@ -55,4 +56,9 @@ public class CloseOrderDto
 {
     public PaymentMethod PaymentMethod { get; set; }
     public int UserId { get; set; }
+}
+
+public class UpdateOrderStatusDto
+{
+    public OrderStatus Status { get; set; }
 }
