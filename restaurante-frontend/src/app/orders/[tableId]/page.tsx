@@ -266,13 +266,14 @@ export default function OrderPage() {
   };
 
   const getStatusText = (status: OrderStatus) => {
-    return status === OrderStatus.InProgress ? 'PEDIDO EM ANDAMENTO' : 'PEDIDO NA MESA';
+    // Status ausente/legado (ex.: resposta de API antiga sem o campo) é tratado como "em andamento"
+    return status === OrderStatus.OnTable ? 'PEDIDO NA MESA' : 'PEDIDO EM ANDAMENTO';
   };
 
   const getStatusColor = (status: OrderStatus) => {
-    return status === OrderStatus.InProgress 
-      ? 'bg-amber-500/40 border-amber-400 text-amber-50 font-bold' 
-      : 'bg-emerald-500/40 border-emerald-400 text-emerald-50 font-bold';
+    return status === OrderStatus.OnTable
+      ? 'bg-emerald-500/40 border-emerald-400 text-emerald-50 font-bold'
+      : 'bg-amber-500/40 border-amber-400 text-amber-50 font-bold';
   };
 
   const syncLabel = syncState === 'saving'
@@ -491,9 +492,6 @@ export default function OrderPage() {
         <DialogContent className="max-w-2xl border-surface-light bg-surface text-white">
           <DialogHeader className="flex-row items-center justify-between gap-3 space-y-0">
             <DialogTitle className="font-heading text-2xl text-white">Adicionar Produto</DialogTitle>
-            <Button variant="ghost" size="icon-sm" onClick={closeProductSelector} className="text-slate-300 hover:text-white">
-              <X className="h-4 w-4" />
-            </Button>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -600,10 +598,10 @@ export default function OrderPage() {
           {order && (
             <div className="space-y-3">
               <Button
-                variant={order.status === OrderStatus.InProgress ? 'default' : 'outline'}
+                variant={order.status !== OrderStatus.OnTable ? 'default' : 'outline'}
                 onClick={() => updateOrderStatus(OrderStatus.InProgress)}
                 disabled={updatingStatus}
-                className={order.status === OrderStatus.InProgress ? 'w-full bg-amber-500 hover:bg-amber-600' : 'w-full'}
+                className={order.status !== OrderStatus.OnTable ? 'w-full bg-amber-500 hover:bg-amber-600' : 'w-full'}
               >
                 {updatingStatus ? 'Atualizando...' : 'Pedido em andamento'}
               </Button>

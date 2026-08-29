@@ -2,7 +2,8 @@ import { User, Category, Product, Table, Order, CashRegister, CashClosing } from
 
 const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/+$/, '');
 const API_BASE_URL = configuredApiUrl || (process.env.NODE_ENV === 'development' ? 'http://localhost:5230/api' : null);
-const API_TIMEOUT_MS = 15000;
+// 30s: suficiente para o primeiro acesso após cold start do backend (Render free tier)
+const API_TIMEOUT_MS = 30000;
 
 async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
   if (!API_BASE_URL) {

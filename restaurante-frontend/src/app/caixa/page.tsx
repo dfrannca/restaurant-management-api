@@ -22,7 +22,8 @@ import {
   FileText, 
   Users, 
   ShoppingCart,
-  AlertCircle
+  AlertCircle,
+  CheckCircle2
 } from 'lucide-react';
 
 export default function CashRegisterPage() {
@@ -38,6 +39,7 @@ export default function CashRegisterPage() {
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [closingBalance, setClosingBalance] = useState('');
   const [isClosing, setIsClosing] = useState(false);
+  const [resultModal, setResultModal] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   async function loadRegisterData() {
     console.info('[cash] load started', { at: new Date().toISOString() });
@@ -85,23 +87,32 @@ export default function CashRegisterPage() {
       const balanceValue = parseFloat(closingBalance) || 0;
       await api.closeCashRegister({ closingBalance: balanceValue });
       
-      // Reset local states
-      setActiveRegister(null);
-      setSummary(null);
       setShowCloseModal(false);
       setClosingBalance('');
       
       // Dispatch register changed event
       window.dispatchEvent(new Event('cashRegisterChanged'));
       
-      alert('Caixa fechado com sucesso!');
-      router.push('/');
+      setResultModal({
+        type: 'success',
+        message: `Caixa fechado com sucesso! Saldo final informado: ${formatCurrency(balanceValue)}.`
+      });
     } catch (error) {
       console.error('Failed to close cash register:', error);
-      alert((error as Error).message || 'Falha ao fechar o caixa');
+      setResultModal({ type: 'error', message: (error as Error).message || 'Falha ao fechar o caixa' });
     } finally {
       setIsClosing(false);
     }
+  };
+
+  const closeResultModal = () => {
+    // No sucesso, sincroniza a tela com o caixa já encerrado
+    // (isso troca a página para o estado "Caixa Fechado")
+    if (resultModal?.type === 'success') {
+      setActiveRegister(null);
+      setSummary(null);
+    }
+    setResultModal(null);
   };
 
   const formatCurrency = (value: number) => {
@@ -532,6 +543,57 @@ export default function CashRegisterPage() {
                 Voltar
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Close Result Feedback Dialog */}
+      <Dialog open={resultModal !== null} onOpenChange={open => { if (!open) closeResultModal(); }}>
+        <DialogContent className="border-surface-light bg-surface text-slate-100 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-heading text-xl font-bold text-white text-center">
+              {resultModal?.type === 'success' ? 'Caixa Fechado' : 'Falha no Fechamento'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6 pt-2">
+            <div className="flex flex-col items-center gap-4 text-center">
+              <div
+                className={`h-16 w-16 rounded-full flex items-center justify-center border ${
+                  resultModal?.type === 'success'
+                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                    : 'bg-red-500/10 border-red-500/20 text-red-500'
+                }`}
+              >
+                {resultModal?.type === 'success' ? <CheckCircle2 className="h-8 w-8" /> : <AlertCircle className="h-8 w-8" />}
+              </div>
+              <p className="text-slate-300 text-sm">{resultModal?.message}</p>
+            </div>
+
+            {resultModal?.type === 'success' ? (
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button
+                  onClick={() => { closeResultModal(); router.push('/'); }}
+                  className="flex-1 rounded-xl bg-emerald-600 py-3 font-bold uppercase tracking-widest text-white hover:bg-emerald-700 cursor-pointer"
+                >
+                  Ir para o início
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => { closeResultModal(); router.push('/historico'); }}
+                  className="flex-1 rounded-xl border-surface-light bg-surface-light/30 text-slate-300 hover:bg-surface-light hover:text-white cursor-pointer"
+                >
+                  Ver histórico
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={closeResultModal}
+                className="w-full rounded-xl border-surface-light bg-surface-light/30 text-slate-300 hover:bg-surface-light hover:text-white cursor-pointer"
+              >
+                Voltar
+              </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>
