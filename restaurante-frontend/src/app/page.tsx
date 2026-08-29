@@ -262,7 +262,12 @@ export default function Dashboard() {
           <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto md:ml-auto">
             <div className="relative min-w-0 sm:w-72">
               <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-500" />
-              <Input value={tableSearch} onChange={(event) => setTableSearch(event.target.value)} placeholder="Pesquisar mesa..." className="h-11 border-surface-light bg-surface/70 pl-9 text-white" />
+              <Input 
+                value={tableSearch} 
+                onChange={(event) => setTableSearch(event.currentTarget.value)} 
+                placeholder="Pesquisar mesa..." 
+                className="h-11 border-surface-light bg-surface/70 pl-9 text-white placeholder:text-slate-500" 
+              />
             </div>
             <Button variant="outline" onClick={() => void loadTables()} className="h-11 border-surface-light bg-surface/40 text-slate-200 hover:border-accent hover:text-white">
               <RefreshCw className="h-4 w-4" /> Atualizar

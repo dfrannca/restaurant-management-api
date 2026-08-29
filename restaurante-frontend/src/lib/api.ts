@@ -116,6 +116,8 @@ export const api = {
     request<Order>(`/orders/${orderId}/items/${itemId}`, { method: 'PUT', body: JSON.stringify(data) }),
   removeOrderItem: (orderId: number, itemId: number) =>
     request<Order>(`/orders/${orderId}/items/${itemId}`, { method: 'DELETE' }),
+  updateOrderStatus: (orderId: number, status: number) =>
+    request<Order>(`/orders/${orderId}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
   closeOrder: (id: number, data: { paymentMethod: number; userId: number }) =>
     request<Order>(`/orders/${id}/close`, { method: 'POST', body: JSON.stringify(data) }),
 

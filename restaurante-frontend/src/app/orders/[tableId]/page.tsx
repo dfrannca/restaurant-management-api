@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
-import { Category, Order, PaymentMethod, Product } from '@/types';
+import { Category, Order, PaymentMethod, Product, OrderStatus } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUser } from '@/context/UserContext';
-import { ArrowLeft, CheckCircle2, Minus, Plus, Search, Trash2, X, Clock, Printer } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Minus, Plus, Search, Trash2, X, Clock, Printer, PlusCircle, RefreshCw, AlertCircle, ChevronDown } from 'lucide-react';
 
 const money = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 const paymentName = (v: PaymentMethod | null) => ({ 0: 'Dinheiro', 1: 'Pix', 2: 'Cartão de débito', 3: 'Cartão de crédito' }[v ?? 0]);
@@ -35,8 +35,15 @@ export default function OrderPage() {
   const [receivedText, setReceivedText] = useState('');
   const [saving, setSaving] = useState(false);
   const [changingItems, setChangingItems] = useState(false);
+  const [syncState, setSyncState] = useState<'saving' | 'synced' | 'error'>('synced');
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [productModalOpen, setProductModalOpen] = useState(false);
+  const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
+  const [selectedQuantity, setSelectedQuantity] = useState(1);
   const [paid, setPaid] = useState(false);
   const [printRequested, setPrintRequested] = useState(false);
+  const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
 
   const load = useCallback(async () => {
     console.time('[tables/order] load');
@@ -52,10 +59,14 @@ export default function OrderPage() {
       setCategories(c);
       setBlocked(!r);
       setNotes(Object.fromEntries(o.orderItems.map(i => [i.id, i.observations ?? ''])));
+      setSyncState('synced');
+      setSyncMessage(null);
       console.timeEnd('[tables/order] load');
       console.info('[tables/order] API response', { tableId, orderId: o.id, items: o.orderItems.length });
     } catch {
       console.timeEnd('[tables/order] load');
+      setSyncState('error');
+      setSyncMessage('Erro ao sincronizar — Tentar novamente');
       router.push('/');
     } finally {
       setLoading(false);
@@ -81,32 +92,55 @@ export default function OrderPage() {
     [order?.orderItems]
   );
 
-  async function addProduct(product: Product) {
+  const syncAction = useCallback((nextState: 'saving' | 'synced' | 'error', message?: string) => {
+    setSyncState(nextState);
+    setSyncMessage(nextState === 'error' ? message ?? 'Erro ao sincronizar — Tentar novamente' : null);
+  }, []);
+
+  const retrySync = useCallback(() => {
+    syncAction('saving');
+    void load();
+  }, [load, syncAction]);
+
+  async function addProduct(product: Product, quantity = 1) {
     if (!order || changingItems || blocked) return;
     setChangingItems(true);
+    syncAction('saving');
     console.time(`[order-item] add ${product.id}`);
     try {
-      const updatedOrder = await api.addOrderItem(order.id, { productId: product.id, quantity: 1 });
+      const updatedOrder = await api.addOrderItem(order.id, { productId: product.id, quantity });
       setOrder(updatedOrder);
       setNotes(Object.fromEntries(updatedOrder.orderItems.map(i => [i.id, i.observations ?? ''])));
+      syncAction('synced');
       console.timeEnd(`[order-item] add ${product.id}`);
       console.info('[order-item] updated', { orderId: updatedOrder.id, items: updatedOrder.orderItems.length, total: updatedOrder.totalAmount });
     } catch (error) {
       console.error('[order-item] add failed', error);
+      syncAction('error', (error as Error).message || 'Erro ao sincronizar — Tentar novamente');
       alert((error as Error).message || 'Falha ao adicionar produto.');
     } finally {
       setChangingItems(false);
     }
   }
 
+  async function addSelectedProduct() {
+    if (!selectedProduct) return;
+    await addProduct(selectedProduct, selectedQuantity);
+    setSelectedProductId(null);
+    setSelectedQuantity(1);
+  }
+
   async function update(id: number, quantity: number, observation = notes[id] || '') {
     if (!order || quantity < 1) return;
     if (changingItems) return;
     setChangingItems(true);
+    syncAction('saving');
     try {
       const updatedOrder = await api.updateOrderItem(order.id, id, { quantity, observations: observation || undefined });
       setOrder(updatedOrder);
+      syncAction('synced');
     } catch (error) {
+      syncAction('error', (error as Error).message || 'Erro ao sincronizar — Tentar novamente');
       alert((error as Error).message || 'Falha ao atualizar item.');
     } finally {
       setChangingItems(false);
@@ -117,10 +151,13 @@ export default function OrderPage() {
     if (order) {
       if (changingItems) return;
       setChangingItems(true);
+      syncAction('saving');
       try {
         const updatedOrder = await api.removeOrderItem(order.id, id);
         setOrder(updatedOrder);
+        syncAction('synced');
       } catch (error) {
+        syncAction('error', (error as Error).message || 'Erro ao sincronizar — Tentar novamente');
         alert((error as Error).message || 'Falha ao remover item.');
       } finally {
         setChangingItems(false);
@@ -138,6 +175,25 @@ export default function OrderPage() {
     setPrintRequested(true);
   }
 
+  async function updateOrderStatus(newStatus: OrderStatus) {
+    if (!order || updatingStatus) return;
+    setUpdatingStatus(true);
+    syncAction('saving');
+    try {
+      const updatedOrder = await api.updateOrderStatus(order.id, newStatus);
+      setOrder(updatedOrder);
+      setStatusModalOpen(false);
+      syncAction('synced');
+      console.info('[order] status updated', { orderId: updatedOrder.id, status: updatedOrder.status });
+    } catch (error) {
+      console.error('[order] status update failed', error);
+      syncAction('error', (error as Error).message || 'Erro ao sincronizar — Tentar novamente');
+      alert((error as Error).message || 'Falha ao atualizar status.');
+    } finally {
+      setUpdatingStatus(false);
+    }
+  }
+
   useEffect(() => {
     if (!printRequested || !order?.orderItems.length) return;
 
@@ -153,6 +209,24 @@ export default function OrderPage() {
       window.removeEventListener('afterprint', restoreAfterPrint);
     };
   }, [order, printRequested]);
+
+  const openProductSelector = () => {
+    setProductModalOpen(true);
+    setSearch('');
+    setCategory(null);
+    setSelectedProductId(null);
+    setSelectedQuantity(1);
+  };
+
+  const closeProductSelector = () => {
+    setProductModalOpen(false);
+    setSearch('');
+    setCategory(null);
+    setSelectedProductId(null);
+    setSelectedQuantity(1);
+  };
+
+  const selectedProduct = selectedProductId !== null ? products.find(product => product.id === selectedProductId) ?? null : null;
 
   const received = Number(receivedText.replace(',', '.'));
   const insufficient = method === PaymentMethod.Cash && (!receivedText || Number.isNaN(received) || !order || received < orderTotal);
@@ -191,6 +265,27 @@ export default function OrderPage() {
     return 'Aberta recentemente';
   };
 
+  const getStatusText = (status: OrderStatus) => {
+    return status === OrderStatus.InProgress ? 'PEDIDO EM ANDAMENTO' : 'PEDIDO NA MESA';
+  };
+
+  const getStatusColor = (status: OrderStatus) => {
+    return status === OrderStatus.InProgress 
+      ? 'bg-amber-500/40 border-amber-400 text-amber-50 font-bold' 
+      : 'bg-emerald-500/40 border-emerald-400 text-emerald-50 font-bold';
+  };
+
+  const syncLabel = syncState === 'saving'
+    ? 'Salvando alterações...'
+    : syncState === 'error'
+      ? 'Erro ao sincronizar — Tentar novamente'
+      : 'Pedido sincronizado';
+  const syncIconClass = syncState === 'saving'
+    ? 'animate-spin text-emerald-300'
+    : syncState === 'error'
+      ? 'text-red-300'
+      : 'text-emerald-300';
+
   if (loading || !order)
     return (
       <div className="flex min-h-screen items-center justify-center bg-graphite">
@@ -200,174 +295,175 @@ export default function OrderPage() {
 
 
   return (
-    <div className="min-h-screen bg-graphite pb-24">
-      <header className="border-b border-white/8 bg-graphite/85">
-        <div className="container mx-auto flex flex-col justify-between gap-4 px-4 py-5 sm:flex-row sm:px-6">
-          <div className="flex flex-col items-start gap-4">
+    <div className="min-h-screen bg-graphite pb-10">
+      <div className="mx-auto w-[92vw] max-w-[1500px] py-6">
+        <header className="mb-5">
+          <div className="flex flex-col gap-2 px-0 py-0 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <Button
+                variant="outline"
+                onClick={() => router.push('/')}
+                className="min-h-10 border-surface-light bg-surface-light/30 px-3 text-slate-200 hover:border-amber-400/60 hover:bg-amber-400/10 hover:text-white focus-visible:ring-2 focus-visible:ring-amber-400"
+              >
+                <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                Voltar
+              </Button>
+
+              <div className="flex flex-col items-start gap-1">
+                <span className="font-heading text-2xl font-extrabold leading-tight text-white sm:text-3xl">Mesa {order.tableNumber}</span>
+                <div className="flex items-center gap-2 text-xs text-slate-400 sm:text-sm">
+                  <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span>{getOrderStatus(order.openedAt, order.isClosed)}</span>
+                  <span>·</span>
+                  <div className="flex items-center gap-1">
+                    {syncState === 'error' ? (
+                      <AlertCircle className="h-3.5 w-3.5 text-red-300" />
+                    ) : (
+                      <RefreshCw className={`h-3.5 w-3.5 ${syncIconClass}`} />
+                    )}
+                    <span className={syncState === 'error' ? 'text-red-300' : 'text-emerald-300'}>
+                      {syncState === 'error' ? 'Erro ao sincronizar' : 'Sincronizado'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <Button
               variant="outline"
-              onClick={() => router.push('/')}
-              className="min-h-10 border-surface-light bg-surface-light/30 px-3 text-slate-200 hover:border-amber-400/60 hover:bg-amber-400/10 hover:text-white focus-visible:ring-2 focus-visible:ring-amber-400"
+              onClick={() => setStatusModalOpen(true)}
+              className={`w-fit label-uppercase border px-3 py-2 text-xs font-semibold transition-all sm:text-sm ${getStatusColor(order.status)}`}
             >
-              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-              Voltar
+              {getStatusText(order.status)}
             </Button>
-            <div className="flex flex-col items-start gap-0.5">
-              <p className="label-uppercase text-amber-400">Pedido em andamento</p>
-              <h1 className="font-heading text-3xl font-extrabold leading-tight text-white">Mesa {order.tableNumber}</h1>
-              <div className="mt-2 flex items-center gap-2 text-sm text-slate-400">
-                <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
-                <span>{getOrderStatus(order.openedAt, order.isClosed)}</span>
-              </div>
-            </div>
           </div>
-          <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-right">
-            <span className="label-uppercase text-amber-300">Total do pedido</span>
-            <p className="font-heading text-3xl font-extrabold text-amber-300">{money(orderTotal)}</p>
-          </div>
-        </div>
-      </header>
+        </header>
 
-      <main className="container mx-auto grid gap-6 px-4 py-6 lg:grid-cols-2 sm:px-6">
-        <Card className="glass-panel min-h-[36rem] rounded-2xl border-0">
-          <CardHeader className="border-b border-white/8">
-            <CardTitle className="font-heading text-lg text-white">Itens do pedido</CardTitle>
-          </CardHeader>
-          <CardContent className="flex h-[30rem] flex-col p-4">
-            {!order.orderItems.length ? (
-              <div className="m-auto text-center text-slate-400">
-                Nenhum item adicionado
-                <br />
-                <span className="text-sm text-slate-500">Escolha um produto ao lado para começar.</span>
-              </div>
-            ) : (
-              <div className="flex-1 space-y-3 overflow-y-auto pr-1">
-                {order.orderItems.map(i => (
-                  <div key={i.id} className="rounded-xl border border-white/8 bg-surface-light/20 p-3">
-                    <div className="flex justify-between gap-3">
-                      <div>
-                        <p className="font-semibold text-white">{i.productName}</p>
-                        <p className="text-xs text-slate-400">{money(i.unitPrice)} por unidade</p>
+        <main className="grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(300px,0.85fr)]">
+          <Card className="glass-panel rounded-2xl border-0">
+            <CardHeader className="border-b border-white/8 pb-2">
+              <CardTitle className="font-heading text-lg text-white">Itens do pedido</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3 p-3">
+              {!order.orderItems.length ? (
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-surface-light bg-surface-light/10 px-6 py-8 text-center text-slate-400">
+                  <p className="text-lg font-medium text-slate-200">Nenhum item adicionado</p>
+                  <p className="mt-2 text-sm text-slate-400">Clique em “Adicionar Produto” para começar.</p>
+                  <Button
+                    variant="outline"
+                  onClick={openProductSelector}
+                    className="mt-4 border-amber-400/40 bg-amber-400/10 text-amber-200 hover:bg-amber-400/15"
+                  >
+                    <PlusCircle className="h-4 w-4" />
+                    Adicionar Produto
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {order.orderItems.map(i => (
+                    <div key={i.id} className="rounded-xl border border-white/8 bg-surface-light/15 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-semibold text-white">{i.productName}</p>
+                          <p className="mt-1 text-xs text-slate-400">{money(i.unitPrice)} por unidade</p>
+                        </div>
+                        <span className="font-heading text-base text-amber-300">{money(i.subtotal)}</span>
                       </div>
-                      <b className="text-amber-300">{money(i.subtotal)}</b>
-                    </div>
-                    <div className="mt-3 flex items-center gap-2">
-                      <Button size="icon-sm" variant="outline" disabled={blocked || i.quantity === 1} onClick={() => update(i.id, i.quantity - 1)}>
-                        <Minus />
-                      </Button>
-                      <b className="w-7 text-center text-white">{i.quantity}</b>
-                      <Button size="icon-sm" variant="outline" disabled={blocked} onClick={() => update(i.id, i.quantity + 1)}>
-                        <Plus />
-                      </Button>
-                      {!blocked && (
-                        <Button size="sm" variant="ghost" onClick={() => remove(i.id)} className="ml-auto text-red-300">
-                          <Trash2 /> Remover
+
+                      <div className="mt-3 flex items-center gap-2">
+                        <Button size="icon-sm" variant="outline" disabled={blocked || i.quantity === 1} onClick={() => update(i.id, i.quantity - 1)}>
+                          <Minus className="h-3.5 w-3.5" />
                         </Button>
-                      )}
+                        <span className="min-w-7 text-center text-sm font-semibold text-white">{i.quantity}</span>
+                        <Button size="icon-sm" variant="outline" disabled={blocked} onClick={() => update(i.id, i.quantity + 1)}>
+                          <Plus className="h-3.5 w-3.5" />
+                        </Button>
+                        {!blocked && (
+                          <Button size="sm" variant="ghost" onClick={() => remove(i.id)} className="ml-auto text-red-300 hover:text-red-200 hover:bg-red-500/10">
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Remover
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="mt-4">
+                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Observação do item</label>
+                        <textarea
+                          disabled={blocked}
+                          value={notes[i.id] || ''}
+                          onChange={e => setNotes(n => ({ ...n, [i.id]: e.target.value }))}
+                          onBlur={() => update(i.id, i.quantity)}
+                          placeholder="Ex.: sem cebola, pouco sal, bem passado..."
+                          className="w-full min-h-[60px] resize-none rounded-lg border border-surface-light bg-graphite/30 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-400/50 disabled:opacity-60"
+                        />
+                      </div>
                     </div>
-                    <Input
-                      disabled={blocked}
-                      value={notes[i.id] || ''}
-                      onChange={e => setNotes(n => ({ ...n, [i.id]: e.target.value }))}
-                      onBlur={() => update(i.id, i.quantity)}
-                      placeholder="Observação opcional"
-                      className="mt-3 border-surface-light bg-graphite/30 text-sm text-white"
-                    />
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="flex flex-col gap-5">
+            <Card className="glass-panel rounded-2xl border-0 h-fit">
+              <CardHeader className="border-b border-white/8 pb-2">
+                <CardTitle className="font-heading text-base text-white">Resumo do pedido</CardTitle>
+              </CardHeader>
+              <CardContent className="px-2 py-1.5">
+                {blocked ? (
+                  <div className="rounded-lg border border-dashed border-surface-light bg-surface-light/10 px-3 py-2 text-center text-xs text-slate-400">
+                    Abra o caixa para adicionar produtos.
                   </div>
-                ))}
+                ) : (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs text-slate-300">
+                      <span>Subtotal</span>
+                      <span>{money(orderTotal)}</span>
+                    </div>
+                    <div className="h-px bg-white/10" />
+                    <div className="flex items-center justify-between text-sm font-semibold text-white">
+                      <span>TOTAL</span>
+                      <span className="font-heading text-lg text-amber-300">{money(orderTotal)}</span>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {!blocked && (
+              <div className="flex flex-col items-center justify-center gap-2">
+                <Button
+                  onClick={openProductSelector}
+                  variant="outline"
+                  className="w-full border-amber-400/40 bg-amber-400/10 text-amber-200 hover:bg-amber-400/15"
+                >
+                  <PlusCircle className="h-4 w-4" />
+                  Adicionar Produto
+                </Button>
+
+                <Button
+                  disabled={!order.orderItems.length}
+                  onClick={printCommand}
+                  variant="outline"
+                  className="w-full border-sky-400/40 bg-sky-400/10 text-sky-200 hover:bg-sky-400/15 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Printer className="h-4 w-4" />
+                  Imprimir Comanda
+                </Button>
+
+                <Button
+                  disabled={!order.orderItems.length}
+                  onClick={() => { setPaid(false); setPaymentOpen(true); }}
+                  className="w-full bg-emerald-600 text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  Finalizar Pedido
+                </Button>
               </div>
             )}
-            <div className="mt-3 flex justify-between border-t border-white/8 pt-3">
-              <span className="label-uppercase">Total</span>
-              <b className="font-heading text-2xl text-amber-300">{money(orderTotal)}</b>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="glass-panel min-h-[36rem] rounded-2xl border-0">
-          <CardHeader className="border-b border-white/8">
-            <CardTitle className="font-heading text-lg text-white">Resumo do pedido</CardTitle>
-          </CardHeader>
-          <CardContent className="relative flex h-[30rem] flex-col p-4">
-            {blocked ? (
-              <p className="m-auto text-slate-400">Abra o caixa para adicionar produtos.</p>
-            ) : (
-              <>
-                <p className="label-uppercase mb-2 text-amber-300">Adicionar produto</p>
-                <div className="relative">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                  <Input
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    placeholder="Buscar produto..."
-                    className="border-surface-light bg-graphite/30 pl-9 pr-9 text-white"
-                  />
-                  {search && (
-                    <Button size="icon-sm" variant="ghost" onClick={() => setSearch('')} className="absolute right-1 top-1">
-                      <X />
-                    </Button>
-                  )}
-                </div>
-
-                <Select value={category?.toString() || ''} onValueChange={v => setCategory(v ? Number(v) : null)}>
-                  <SelectTrigger className="mt-3 border-surface-light bg-surface-light/30 text-white">
-                    <SelectValue placeholder="Todas as categorias" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Todas as categorias</SelectItem>
-                    {categories.map(c => (
-                      <SelectItem key={c.id} value={String(c.id)}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <div className="relative mt-3 flex-1 overflow-hidden">
-                  <div className="absolute inset-0 grid content-start grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
-                    {list.length ? (
-                      list.map(p => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          disabled={changingItems}
-                          onClick={() => void addProduct(p)}
-                          className="rounded-xl border border-white/8 bg-surface-light/20 p-3 text-left transition-all hover:border-amber-400/60 hover:bg-amber-400/10 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <b className="text-sm text-white">{p.name}</b>
-                          <p className="mt-2 font-bold text-amber-300">{money(p.price)}</p>
-                          <small className="text-emerald-400">DISPONÍVEL</small>
-                        </button>
-                      ))
-                    ) : (
-                      <p className="col-span-full m-auto mt-10 text-center text-sm text-slate-400">Nenhum produto encontrado</p>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </main>
-
-      {!blocked && (
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/8 bg-graphite/95 p-3">
-          <div className="container mx-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <span className="label-uppercase">Total a pagar</span>
-              <p className="font-heading text-xl font-bold text-amber-300">{money(orderTotal)}</p>
-            </div>
-            <div className="flex gap-2">
-              <Button disabled={!order.orderItems.length} onClick={printCommand} variant="outline" className="border-amber-400 text-amber-300 hover:bg-amber-400/10">
-                <Printer /> Gerar Comanda
-              </Button>
-              <Button disabled={!order.orderItems.length} onClick={() => { setPaid(false); setPaymentOpen(true); }} className="bg-emerald-600 hover:bg-emerald-500">
-                Finalizar Pedido
-              </Button>
-            </div>
           </div>
-        </div>
-      )}
+        </main>
+      </div>
 
       {typeof document !== 'undefined' && createPortal(<section className="print-command" aria-hidden="true">
         <h1>BAR &amp; CHURRASCARIA</h1>
@@ -390,6 +486,149 @@ export default function OrderPage() {
         <hr />
         <h2>COMANDA ABERTA</h2>
       </section>, document.body)}
+
+      <Dialog open={productModalOpen} onOpenChange={open => { if (!open) closeProductSelector(); else setProductModalOpen(true); }}>
+        <DialogContent className="max-w-2xl border-surface-light bg-surface text-white">
+          <DialogHeader className="flex-row items-center justify-between gap-3 space-y-0">
+            <DialogTitle className="font-heading text-2xl text-white">Adicionar Produto</DialogTitle>
+            <Button variant="ghost" size="icon-sm" onClick={closeProductSelector} className="text-slate-300 hover:text-white">
+              <X className="h-4 w-4" />
+            </Button>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar produto..."
+                className="border-surface-light bg-graphite/30 pl-9 pr-9 text-white placeholder:text-slate-500"
+              />
+              {search && (
+                <Button size="icon-sm" variant="ghost" onClick={() => setSearch('')} className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white">
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+
+            <Select value={category?.toString() || ''} onValueChange={v => setCategory(v ? Number(v) : null)}>
+              <SelectTrigger className="border-surface-light bg-surface-light/30 text-white">
+                <SelectValue placeholder="Todas as categorias" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Todas as categorias</SelectItem>
+                {categories.map(c => (
+                  <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <div className="max-h-[22rem] space-y-2 overflow-y-auto pr-1">
+              {list.length ? (
+                list.map(product => (
+                  <button
+                    key={product.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedProductId(product.id);
+                      setSelectedQuantity(1);
+                    }}
+                    className={`flex w-full items-center justify-between gap-3 rounded-xl border p-3 text-left transition-all ${
+                      selectedProductId === product.id
+                        ? 'border-amber-400/70 bg-amber-500/10'
+                        : 'border-white/8 bg-surface-light/10 hover:border-amber-400/50 hover:bg-amber-500/5'
+                    }`}
+                  >
+                    <div>
+                      <p className="font-medium text-white">{product.name}</p>
+                      <p className="mt-1 text-xs text-slate-400">{product.description || 'Produto disponível'}</p>
+                    </div>
+                    <span className="font-heading text-base text-amber-300">{money(product.price)}</span>
+                  </button>
+                ))
+              ) : (
+                <p className="py-6 text-center text-sm text-slate-400">Nenhum produto encontrado</p>
+              )}
+            </div>
+
+            {selectedProduct && (
+              <div className="rounded-xl border border-white/8 bg-surface-light/10 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-white">{selectedProduct.name}</p>
+                    <p className="text-sm text-amber-300">{money(selectedProduct.price)}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      onClick={() => setSelectedQuantity(value => Math.max(1, value - 1))}
+                      disabled={selectedQuantity <= 1}
+                    >
+                      <Minus className="h-3.5 w-3.5" />
+                    </Button>
+                    <span className="min-w-6 text-center text-sm font-semibold text-white">{selectedQuantity}</span>
+                    <Button variant="outline" size="icon-sm" onClick={() => setSelectedQuantity(value => value + 1)}>
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+
+                <Button
+                  className="mt-3 w-full bg-emerald-600 text-white hover:bg-emerald-500"
+                  onClick={async () => {
+                    await addSelectedProduct();
+                    closeProductSelector();
+                  }}
+                  disabled={changingItems}
+                >
+                  Adicionar ao pedido
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={statusModalOpen} onOpenChange={setStatusModalOpen}>
+        <DialogContent className="max-w-sm border-surface-light bg-surface text-white">
+          <DialogHeader>
+            <DialogTitle className="font-heading text-xl text-white">Mudar status do pedido</DialogTitle>
+          </DialogHeader>
+
+          {order && (
+            <div className="space-y-3">
+              <Button
+                variant={order.status === OrderStatus.InProgress ? 'default' : 'outline'}
+                onClick={() => updateOrderStatus(OrderStatus.InProgress)}
+                disabled={updatingStatus}
+                className={order.status === OrderStatus.InProgress ? 'w-full bg-amber-500 hover:bg-amber-600' : 'w-full'}
+              >
+                {updatingStatus ? 'Atualizando...' : 'Pedido em andamento'}
+              </Button>
+
+              <Button
+                variant={order.status === OrderStatus.OnTable ? 'default' : 'outline'}
+                onClick={() => updateOrderStatus(OrderStatus.OnTable)}
+                disabled={updatingStatus}
+                className={order.status === OrderStatus.OnTable ? 'w-full bg-emerald-600 hover:bg-emerald-500' : 'w-full'}
+              >
+                {updatingStatus ? 'Atualizando...' : 'Pedido na mesa'}
+              </Button>
+
+              <Button
+                variant="ghost"
+                onClick={() => setStatusModalOpen(false)}
+                disabled={updatingStatus}
+                className="w-full"
+              >
+                Cancelar
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog 
         open={paymentOpen} 
