@@ -139,6 +139,11 @@ using (var scope = app.Services.CreateScope())
     else
     {
         await dbContext.Database.MigrateAsync();
+
+        // Guarda de esquema idempotente: garante a coluna Status dos pedidos
+        // mesmo que a migração pendente não a crie no banco de produção.
+        await dbContext.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE \"Orders\" ADD COLUMN IF NOT EXISTS \"Status\" integer NOT NULL DEFAULT 0;");
     }
 
     // Dados iniciais são criados apenas em uma base vazia. Nunca limpe a base

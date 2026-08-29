@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Restaurante.Domain.Interfaces;
 using Restaurante.Infrastructure.Data;
@@ -16,6 +17,13 @@ public static class DependencyInjection
                 options.UseSqlite(connectionString);
             else
                 options.UseNpgsql(connectionString);
+
+            // EF9+: o snapshot de migrações está desatualizado em relação ao modelo
+            // (Order.Status). A migração AddOrderStatus já cria a coluna, mas o
+            // PendingModelChangesWarning é promovido a exceção no Migrate() e
+            // derrubaria o serviço em produção (Render). Suprimido de forma pontual.
+            options.ConfigureWarnings(warnings =>
+                warnings.Ignore(RelationalEventId.PendingModelChangesWarning));
         });
 
         services.AddScoped<IRepository<Domain.Entities.User>, UserRepository>();
