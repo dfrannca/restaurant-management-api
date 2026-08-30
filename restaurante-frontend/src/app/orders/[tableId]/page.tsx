@@ -148,9 +148,12 @@ export default function OrderPage() {
 
   async function addSelectedProduct() {
     if (!selectedProduct) return;
-    await addProduct(selectedProduct, selectedQuantity);
-    setSelectedProductId(null);
-    setSelectedQuantity(1);
+    const product = selectedProduct;
+    const quantity = selectedQuantity;
+    // Fecha o seletor de produtos imediatamente, antes de persistir.
+    // O optimistic update já insere o item na lista logo em seguida, sem bloquear a UI.
+    closeProductSelector();
+    await addProduct(product, quantity);
   }
 
   async function update(id: number, quantity: number, observation = notes[id] || '') {
@@ -598,10 +601,7 @@ export default function OrderPage() {
 
                 <Button
                   className="mt-3 w-full bg-emerald-600 text-white hover:bg-emerald-500"
-                  onClick={async () => {
-                    await addSelectedProduct();
-                    closeProductSelector();
-                  }}
+                  onClick={() => void addSelectedProduct()}
                   disabled={changingItems}
                 >
                   Adicionar ao pedido
